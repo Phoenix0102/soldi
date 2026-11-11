@@ -1,5 +1,5 @@
 /** Ordine delle sezioni: decide se la transizione scorre verso destra o verso sinistra. */
-const ORDER = ['/', '/movimenti', '/smista', '/conti', '/piano', '/impara', '/importa', '/impostazioni']
+const ORDER = ['/', '/resoconto', '/movimenti', '/smista', '/conti', '/piano', '/impara', '/importa', '/impostazioni']
 
 const base = (p: string) => {
   const clean = p.split('?')[0].replace(/\/+$/, '') || '/'

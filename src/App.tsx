@@ -18,6 +18,7 @@ const loaders = {
   importa: () => import('./pages/Import'),
   impostazioni: () => import('./pages/Settings'),
   smista: () => import('./pages/Triage'),
+  resoconto: () => import('./pages/Report'),
 }
 
 const routes: RouteObject[] = [{
@@ -33,6 +34,7 @@ const routes: RouteObject[] = [{
     { path: 'importa', lazy: page(loaders.importa) },
     { path: 'impostazioni', lazy: page(loaders.impostazioni) },
     { path: 'smista', lazy: page(loaders.smista) },
+    { path: 'resoconto', lazy: page(loaders.resoconto) },
     { path: '*', element: <Navigate to="/" replace /> },
   ],
 }]

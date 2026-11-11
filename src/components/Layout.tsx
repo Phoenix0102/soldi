@@ -1,6 +1,6 @@
 import { Outlet, useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { LayoutGrid, List, Plus, Target, GraduationCap, Wallet, Upload, Settings } from 'lucide-react'
+import { LayoutGrid, List, Plus, Target, GraduationCap, Wallet, Upload, Settings, FileBarChart } from 'lucide-react'
 import { QuickAddProvider, useQuickAdd } from './QuickAdd'
 import { NavLink } from './nav'
 import { NetworkStatus } from './NetworkStatus'
@@ -15,6 +15,7 @@ const MAIN = [
 ]
 const EXTRA = [
   { to: '/conti', label: 'Conti', icon: Wallet },
+  { to: '/resoconto', label: 'Resoconto', icon: FileBarChart },
   { to: '/importa', label: 'Importa', icon: Upload },
   { to: '/impostazioni', label: 'Impostazioni', icon: Settings },
 ]
@@ -57,17 +58,17 @@ function Shell() {
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[248px_1fr]">
       <NetworkStatus />
-      <aside className="sticky top-0 hidden h-dvh flex-col border-r border-line px-4 py-6 lg:flex">
+      <aside className="no-print sticky top-0 hidden h-dvh flex-col border-r border-line px-4 py-6 lg:flex">
         <div className="mb-8 flex items-center gap-2.5 px-3">
           <img src={`${import.meta.env.BASE_URL}icon.svg`} alt="" className="h-8 w-8" />
           <span className="text-xl font-semibold tracking-[-0.02em]">Soldi</span>
         </div>
         <button onClick={() => qa.open()} className="btn btn-primary mb-6 w-full py-3"><Plus size={18} /> Nuovo movimento</button>
         <nav className="flex flex-col gap-0.5">
-          {[...MAIN.slice(0, 2), EXTRA[0], ...MAIN.slice(2)].map((l) => <SideLink key={l.to} {...l} />)}
+          {[MAIN[0], EXTRA[1], MAIN[1], EXTRA[0], ...MAIN.slice(2)].map((l) => <SideLink key={l.to} {...l} />)}
         </nav>
         <nav className="mt-auto flex flex-col gap-0.5">
-          {EXTRA.slice(1).map((l) => <SideLink key={l.to} {...l} />)}
+          {EXTRA.slice(2).map((l) => <SideLink key={l.to} {...l} />)}
         </nav>
       </aside>
 
@@ -77,7 +78,7 @@ function Shell() {
         </div>
       </main>
 
-      <TabBar onAdd={() => qa.open()} />
+      <div className="no-print"><TabBar onAdd={() => qa.open()} /></div>
     </div>
   )
 }

@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Link } from '../components/nav'
 import { subMonths, startOfMonth, parseISO, differenceInCalendarDays } from 'date-fns'
-import { Settings, ChevronRight, CalendarClock, GraduationCap } from 'lucide-react'
+import { Settings, ChevronRight, CalendarClock, GraduationCap, FileBarChart, AlertTriangle, Info } from 'lucide-react'
+import { liveAlerts } from '../lib/insights'
 import { useAccounts, useBalances, useBudgets, useCategories, useRecurring, useSnapshots, useTransactions, useLearnProgress } from '../lib/data'
 import { cashflow, inMonth, networth, networthHistory, savingsRate, spendByCategory } from '../lib/finance'
 import { money, percent, monthLabel, shortDate } from '../lib/format'
@@ -54,6 +55,8 @@ export default function Dashboard() {
   const nextLesson = LESSONS.find((l) => !doneIds.has(l.id))
   const rate = savingsRate(month.income, month.expense)
   const toSort = txs.filter((t) => !t.category_id && t.kind !== 'transfer').length
+  const alerts = liveAlerts(txs, categories, budgets, recurring)
+  const reportMonth = now.getDate() <= 5 ? 'del mese scorso' : 'di questo mese'
 
   return (
     <div>
@@ -104,6 +107,17 @@ export default function Dashboard() {
         </Link>
       )}
 
+      {alerts.length > 0 && (
+        <section className="mt-4 space-y-2">
+          {alerts.map((a, i) => (
+            <div key={i} className="rise flex items-start gap-3 rounded-2xl bg-surface px-4 py-3" style={{ '--i': i } as React.CSSProperties}>
+              {a.tone === 'info' ? <Info size={18} className="mt-0.5 shrink-0 text-muted" /> : <AlertTriangle size={18} className="mt-0.5 shrink-0 text-gold" />}
+              <p className="text-sm">{a.text}</p>
+            </div>
+          ))}
+        </section>
+      )}
+
       <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         {/* Questo mese */}
         <section>
@@ -114,6 +128,9 @@ export default function Dashboard() {
             <Stat label="Risparmiato" value={month.net} hint={month.income > 0 ? `${percent(rate)} delle entrate` : undefined} />
           </div>
           <div className="mt-6 rounded-3xl bg-surface p-5"><CashflowBars data={six} /></div>
+          <Link to="/resoconto" className="press mt-3 flex items-center gap-3 rounded-2xl bg-surface px-4 py-3.5 font-medium hover:bg-sunken">
+            <FileBarChart size={18} className="text-muted" /> <span className="flex-1">Resoconto {reportMonth}</span> <ChevronRight size={18} className="text-faint" />
+          </Link>
         </section>
 
         {/* Dove vanno i soldi */}

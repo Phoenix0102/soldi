@@ -221,3 +221,17 @@ input[type="date"]::-webkit-calendar-picker-indicator { opacity: .6; }
 .prose-lesson p { margin: 0 0 1rem; line-height: 1.65; }
 .prose-lesson strong { font-weight: 650; }
 @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-8px)} 75%{transform:translateX(8px)} }
+
+/* Stampa / PDF del resoconto */
+@media print {
+  :root, .dark { --paper: #fff; --surface: #fff; --sunken: #f1f3f1; --ink: #102a22; --muted: #5a6b63; --line: #dbe2dd; --note: #0f4d3a; --note-ink: #f2f4f1; color-scheme: light; }
+  body { background: #fff !important; }
+  .no-print, [role="dialog"], .toast-wrap { display: none !important; }
+  main { max-width: none !important; padding: 0 !important; }
+  .lg\:grid { display: block !important; }
+  .rise, .page-enter, .bar-fill { animation: none !important; }
+  li, .rise { break-inside: avoid; }
+  h2 { break-after: avoid; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  @page { margin: 14mm; }
+}
