@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { money } from '../lib/format'
 import { reducedMotion } from '../lib/motion'
@@ -26,7 +27,16 @@ export function Sheet({ open, onClose, title, children, wide }: {
     window.addEventListener('keydown', onKey)
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = prev }
+    // Con un pannello aperto le notifiche salgono in alto, così non coprono i campi
+    const count = Number(document.body.dataset.sheets ?? 0) + 1
+    document.body.dataset.sheets = String(count)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+      const left = Number(document.body.dataset.sheets ?? 1) - 1
+      if (left > 0) document.body.dataset.sheets = String(left)
+      else delete document.body.dataset.sheets
+    }
   }, [open, close])
 
   if (!open) return null
@@ -45,7 +55,8 @@ export function Sheet({ open, onClose, title, children, wide }: {
     else setDrag(0)
   }
 
-  return (
+  // Il pannello vive direttamente nel body: nessuna animazione o trasformazione della pagina può intrappolarlo
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label={title}>
       <div className={`absolute inset-0 bg-black/40 backdrop-blur-[2px] ${leaving ? 'fade-leave' : 'fade-enter'}`} onClick={close}
         style={{ opacity: drag ? Math.max(0.2, 1 - drag / 400) : undefined }} />
@@ -62,7 +73,8 @@ export function Sheet({ open, onClose, title, children, wide }: {
         </div>
         <div className="px-5 pb-6">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -103,7 +115,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastCtx.Provider value={push}>
       {children}
-      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(6rem+env(safe-area-inset-bottom))] z-[60] flex flex-col items-center gap-2 px-4 lg:bottom-6" aria-live="polite">
+      <div className="toast-wrap pointer-events-none fixed inset-x-0 bottom-[calc(6rem+env(safe-area-inset-bottom))] z-[60] flex flex-col items-center gap-2 px-4 lg:bottom-6" aria-live="polite">
         {items.map((t) => (
           <div key={t.id} className={`pointer-events-auto flex max-w-full items-center gap-4 rounded-full px-5 py-3 text-sm font-medium shadow-xl ${t.leaving ? 'toast-leave' : 'toast-enter'} ${t.tone === 'err' ? 'bg-neg text-white' : 'bg-ink text-paper'}`}>
             <span className="min-w-0">{t.text}</span>

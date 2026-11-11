@@ -198,7 +198,7 @@ function QuickAddSheet({ prefill, editing, onClose }: { prefill?: Prefill; editi
   return (
     <Sheet open onClose={onClose} title={editing ? 'Modifica movimento' : 'Nuovo movimento'}>
       <div className="flex items-center justify-between gap-3">
-        <Segmented value={mode} onChange={(m) => { setMode(m); if (!editing) { setCategoryId(null); setCatTouched(false) } }}
+        <Segmented value={mode} onChange={(m) => { setMode(m); if (!editing) { setCategoryId(null); setCatTouched(false) } if (!amountStr) amountRef.current?.focus() }}
           options={[{ value: 'expense', label: 'Uscita' }, { value: 'income', label: 'Entrata' }, { value: 'transfer', label: 'Giroconto' }]} />
         {!editing && (
           <>

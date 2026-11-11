@@ -140,17 +140,17 @@ html[data-dir="back"]::view-transition-new(page) { animation: vt-in-left .38s va
 @keyframes vt-in-left { from { opacity: 0; transform: translateX(-48px); } }
 
 /* Entrata della pagina quando le View Transitions non ci sono */
-.page-enter { animation: page-in .38s var(--ease-out) both; }
+.page-enter { animation: page-in .38s var(--ease-out) backwards; }
 @keyframes page-in { from { opacity: 0; transform: translateY(10px); } }
-.swipe-in-left { animation: swipe-in-left .34s cubic-bezier(.32,.72,0,1) both; }
-.swipe-in-right { animation: swipe-in-right .34s cubic-bezier(.32,.72,0,1) both; }
+.swipe-in-left { animation: swipe-in-left .34s cubic-bezier(.32,.72,0,1) backwards; }
+.swipe-in-right { animation: swipe-in-right .34s cubic-bezier(.32,.72,0,1) backwards; }
 @keyframes swipe-in-left { from { opacity: .3; transform: translateX(42%); } }
 @keyframes swipe-in-right { from { opacity: .3; transform: translateX(-42%); } }
 html, body { overscroll-behavior-x: none; }
 @media (max-width: 1023px) { body { overflow-x: hidden; } }
 
 /* Elementi delle liste che entrano in sequenza */
-.rise { animation: rise .45s var(--ease-out) both; animation-delay: calc(min(var(--i, 0), 12) * 35ms); }
+.rise { animation: rise .45s var(--ease-out) backwards; animation-delay: calc(min(var(--i, 0), 12) * 35ms); }
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
 
 /* Icona della tab attiva e pulsante + */
@@ -164,7 +164,7 @@ html, body { overscroll-behavior-x: none; }
 .fab:active { transform: scale(.9); }
 
 /* Barre che si riempiono */
-.bar-fill { transform-origin: left; animation: bar-grow .8s var(--ease-out) both; transition: width .5s var(--ease-out), background-color .3s; }
+.bar-fill { transform-origin: left; animation: bar-grow .8s var(--ease-out) backwards; transition: width .5s var(--ease-out), background-color .3s; }
 @keyframes bar-grow { from { transform: scaleX(0); } }
 
 /* Righe toccabili */
@@ -188,6 +188,7 @@ html, body { overscroll-behavior-x: none; }
 .fade-leave { animation: fade-out .22s ease-in forwards; }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes fade-out { to { opacity: 0; } }
+@media (max-width: 1023px) { body[data-sheets] .toast-wrap { top: calc(env(safe-area-inset-top) + .75rem); bottom: auto; } }
 .toast-enter { animation: toast-in .35s var(--ease-spring); }
 .toast-leave { animation: toast-out .2s ease-in forwards; }
 @keyframes toast-in { from { transform: translateY(16px) scale(.95); opacity: 0; } }
@@ -203,6 +204,11 @@ html, body { overscroll-behavior-x: none; }
   ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
   .tab-indicator, .tab-icon { transition: none; }
 }
+
+/* Campi data: su iOS senza questo restano schiacciati quando sono vuoti */
+input[type="date"].field { -webkit-appearance: none; appearance: none; min-height: 2.95rem; display: block; min-width: 0; }
+input[type="date"]::-webkit-date-and-time-value { text-align: left; }
+input[type="date"]::-webkit-calendar-picker-indicator { opacity: .6; }
 
 /* iOS ingrandisce la pagina sui campi con testo sotto i 16px */
 @media (max-width: 640px) { .field, select { font-size: 16px; } }

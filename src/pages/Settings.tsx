@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Download, LogOut, Plus, Trash2, Lock, KeyRound } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAccounts, useCategories, useRules, useTable, useTransactions } from '../lib/data'
@@ -17,7 +18,7 @@ export default function SettingsPage() {
   const [lock, setLock] = useState(lockMinutes())
   const [pwOpen, setPwOpen] = useState(false)
 
-  if (pinSetup) return <div className="fixed inset-0 z-50"><PinSetup onDone={() => { setPinSetup(false); setPinOn(hasPin()); toast('PIN impostato') }} /></div>
+  if (pinSetup) return createPortal(<div className="fixed inset-0 z-[70]"><PinSetup onDone={() => { setPinSetup(false); setPinOn(hasPin()); toast('PIN impostato') }} /></div>, document.body)
 
   return (
     <div>
