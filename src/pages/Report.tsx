@@ -91,7 +91,7 @@ export default function Report() {
                         </div>
                         <div className="relative mt-1.5">
                           <Bar value={c.spent} max={maxCat} thin tone={r.hasHistory && c.diff > c.avg * 0.3 && c.avg > 0 ? 'warn' : 'brand'} />
-                          {r.hasHistory && c.avg > 0 && Math.abs(c.pct) >= 0.01 && <span className="absolute -top-1 h-3.5 w-0.5 rounded bg-ink/60" style={{ left: `${(c.avg / maxCat) * 100}%` }} />}
+                          {r.hasHistory && c.avg > 0 && <span className="absolute -top-1 h-3.5 w-0.5 rounded bg-ink/60" style={{ left: `${(c.avg / maxCat) * 100}%` }} />}
                         </div>
                       </div>
                     </li>

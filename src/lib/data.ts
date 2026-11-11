@@ -1,13 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from './supabase'
 import type {
-  ApiToken, AppSettings,
+  ApiToken, AppSettings, Holding,
   Account, AccountBalance, Budget, Category, Goal, ImportProfile, LearnProgress,
   Recurring, Rule, Snapshot, Transaction,
 } from './types'
 
 type Table =
-  | 'api_tokens' | 'app_settings'
+  | 'api_tokens' | 'app_settings' | 'holdings'
   | 'accounts' | 'categories' | 'transactions' | 'balance_snapshots' | 'budgets'
   | 'goals' | 'recurring' | 'rules' | 'import_profiles' | 'learn_progress'
 
@@ -84,11 +84,14 @@ export const useAppSettings = () =>
     if (error) throw error
     return (data as AppSettings | null)
   } })
+export const useHoldings = () =>
+  useQuery({ queryKey: ['holdings'], queryFn: async () => num(await fetchAll<Holding>('holdings', 'created_at'), ['quantity', 'avg_price', 'last_price', 'prev_close']) })
 export const useLearnProgress = () =>
   useQuery({ queryKey: ['learn_progress'], queryFn: () => fetchAll<LearnProgress>('learn_progress', 'completed_at') })
 
 const AFFECTS: Record<Table, string[]> = {
   api_tokens: ['api_tokens'],
+  holdings: ['holdings', 'balances', 'balance_snapshots'],
   app_settings: ['app_settings'],
   accounts: ['accounts', 'balances'],
   categories: ['categories'],

@@ -8,6 +8,8 @@ const pct = new Intl.NumberFormat('it-IT', { style: 'percent', maximumFractionDi
 export const money = (n: number, round = false) => (round ? eur0 : eur).format(n || 0)
 export const signedMoney = (n: number) => (n > 0 ? '+' : '') + money(n)
 export const percent = (n: number) => pct.format(Number.isFinite(n) ? n : 0)
+const pct1 = new Intl.NumberFormat('it-IT', { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 })
+export const percent1 = (n: number) => pct1.format(Number.isFinite(n) ? n : 0)
 
 export const todayISO = () => format(new Date(), 'yyyy-MM-dd')
 export const iso = (d: Date) => format(d, 'yyyy-MM-dd')

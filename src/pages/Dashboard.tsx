@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from '../components/nav'
 import { subMonths, startOfMonth, parseISO, differenceInCalendarDays } from 'date-fns'
 import { Settings, ChevronRight, CalendarClock, GraduationCap, FileBarChart, AlertTriangle, Info } from 'lucide-react'
 import { liveAlerts } from '../lib/insights'
-import { useAccounts, useBalances, useBudgets, useCategories, useRecurring, useSnapshots, useTransactions, useLearnProgress } from '../lib/data'
+import { useAccounts, useBalances, useBudgets, useCategories, useRecurring, useSnapshots, useTransactions, useLearnProgress, useHoldings } from '../lib/data'
+import { useRefreshQuotes } from '../components/Portfolio'
 import { cashflow, inMonth, networth, networthHistory, savingsRate, spendByCategory } from '../lib/finance'
 import { money, percent, monthLabel, shortDate } from '../lib/format'
 import { Guilloche } from '../components/Guilloche'
@@ -26,6 +27,14 @@ export default function Dashboard() {
   const { data: progress = [] } = useLearnProgress()
   const qa = useQuickAdd()
   const [balOpen, setBalOpen] = useState(false)
+  const { data: holdings = [], isFetched: holdingsReady } = useHoldings()
+  const refreshQuotes = useRefreshQuotes()
+  // Il valore degli investimenti si aggiorna da solo se le quotazioni hanno più di 3 ore
+  useEffect(() => {
+    if (!holdingsReady || !holdings.length) return
+    const oldest = Math.min(...holdings.map((h) => (h.last_price_at ? +new Date(h.last_price_at) : 0)))
+    if (Date.now() - oldest > 3 * 3600_000) refreshQuotes().catch(() => {})
+  }, [holdingsReady]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const now = new Date()
   const nw = useMemo(() => networth(accounts ?? [], balances), [accounts, balances])

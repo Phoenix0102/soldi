@@ -111,6 +111,20 @@ export interface ImportMapping {
   skipRows: number
 }
 
+export interface Holding {
+  id: string
+  account_id: string
+  symbol: string
+  isin: string | null
+  name: string
+  quantity: number
+  avg_price: number
+  currency: string
+  last_price: number | null
+  prev_close: number | null
+  last_price_at: string | null
+}
+
 export interface ApiToken { id: string; label: string; last_used_at: string | null; created_at: string }
 export interface AppSettings { user_id: string; default_account_id: string | null; data: Record<string, unknown> }
 

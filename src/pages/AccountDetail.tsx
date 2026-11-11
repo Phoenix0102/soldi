@@ -10,6 +10,7 @@ import { money, monthShort, monthLabel, longDate } from '../lib/format'
 import { ACCOUNT_TYPES, type Account } from '../lib/types'
 import { TxRow } from '../components/TxRow'
 import { AccountForm } from '../components/AccountForm'
+import { Portfolio } from '../components/Portfolio'
 import { BalanceSheet } from '../components/BalanceSheet'
 import { Confirm, Empty, Money, SkeletonPage, useToast } from '../components/ui'
 
@@ -89,6 +90,8 @@ export default function AccountDetail() {
           </ul>
         </details>
       )}
+
+      {acc.type === 'investment' && <Portfolio accountId={acc.id} />}
 
       <h2 className="mt-8 mb-2 text-lg font-semibold">Movimenti</h2>
       {own.length === 0 ? <Empty title="Nessun movimento su questo conto" /> : (
