@@ -12,6 +12,8 @@ import { Label, PageHeader, Segmented, Sheet, useToast } from '../components/ui'
 import type { Category, Rule } from '../lib/types'
 import { ApplePaySetup } from '../components/ApplePaySetup'
 import { NotifySetup } from '../components/NotifySetup'
+import { BankSetup } from '../components/BankSetup'
+import { useSearchParams } from 'react-router-dom'
 import { bioAvailable, bioEnabled, disableBio, enableBio } from '../lib/biometric'
 
 export default function SettingsPage() {
@@ -23,6 +25,11 @@ export default function SettingsPage() {
   const [pwOpen, setPwOpen] = useState(false)
   const [bioOk, setBioOk] = useState(false)
   const [bioOn, setBioOn] = useState(bioEnabled())
+  const [sp] = useSearchParams()
+  useEffect(() => {
+    const id = sp.get('sezione')
+    if (id) setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 350)
+  }, [sp])
   useEffect(() => { bioAvailable().then(setBioOk) }, [])
 
   if (pinSetup) return createPortal(<div className="fixed inset-0 z-[70]"><PinSetup onDone={() => { setPinSetup(false); setPinOn(hasPin()); toast('PIN impostato') }} /></div>, document.body)
@@ -68,8 +75,9 @@ export default function SettingsPage() {
           </div>
         </Section>
 
+        <BankSetup />
         <NotifySetup />
-        <ApplePaySetup />
+        <div id="applepay"><ApplePaySetup /></div>
         <CategoriesSection />
         <RulesSection />
         <ExportSection />

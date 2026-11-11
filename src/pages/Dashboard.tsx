@@ -5,7 +5,8 @@ import { Settings, ChevronRight, CalendarClock, GraduationCap, FileBarChart, Ale
 import { liveAlerts } from '../lib/insights'
 import { useAccounts, useBalances, useBudgets, useCategories, useRecurring, useSnapshots, useTransactions, useLearnProgress, useHoldings } from '../lib/data'
 import { useRefreshQuotes } from '../components/Portfolio'
-import { useAppSettings } from '../lib/data'
+import { useAppSettings, useBankConnections } from '../lib/data'
+import { useBankSync } from '../components/BankSetup'
 import { useGo } from '../components/nav'
 import { cashflow, inMonth, networth, networthHistory, savingsRate, spendByCategory } from '../lib/finance'
 import { money, percent, monthLabel, shortDate } from '../lib/format'
@@ -39,6 +40,14 @@ export default function Dashboard() {
     if (localStorage.getItem('soldi-onboarded') || settings?.data?.onboarded) return
     if (!txs.length && !snaps.length) go('/benvenuto', { replace: true })
   }, [settingsReady, txReady, snapsReady]) // eslint-disable-line react-hooks/exhaustive-deps
+  const { data: conns = [], isFetched: connsReady } = useBankConnections()
+  const bankSync = useBankSync()
+  // Banche collegate: se l'ultimo aggiornamento ha più di 6 ore lo rifaccio in background
+  useEffect(() => {
+    if (!connsReady) return
+    const act = conns.filter((c) => c.status === 'active')
+    if (act.length && act.some((c) => !c.last_sync_at || Date.now() - +new Date(c.last_sync_at) > 6 * 3600_000)) bankSync().catch(() => {})
+  }, [connsReady]) // eslint-disable-line react-hooks/exhaustive-deps
   const { data: holdings = [], isFetched: holdingsReady } = useHoldings()
   const refreshQuotes = useRefreshQuotes()
   // Il valore degli investimenti si aggiorna da solo se le quotazioni hanno più di 3 ore

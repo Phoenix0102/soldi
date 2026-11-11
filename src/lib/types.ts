@@ -125,6 +125,9 @@ export interface Holding {
   last_price_at: string | null
 }
 
+export interface BankConnection { id: string; aspsp_name: string; country: string; status: 'pending' | 'active' | 'expired' | 'error'; valid_until: string | null; last_sync_at: string | null; last_error: string | null; created_at: string }
+export interface BankAccount { id: string; connection_id: string; uid: string; iban: string | null; name: string | null; currency: string | null; account_id: string | null; last_sync_at: string | null }
+
 export interface ApiToken { id: string; label: string; last_used_at: string | null; created_at: string }
 export interface AppSettings { user_id: string; default_account_id: string | null; data: Record<string, unknown> }
 

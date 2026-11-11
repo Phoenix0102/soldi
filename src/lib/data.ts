@@ -1,13 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from './supabase'
 import type {
-  ApiToken, AppSettings, Holding,
+  ApiToken, AppSettings, Holding, BankConnection, BankAccount,
   Account, AccountBalance, Budget, Category, Goal, ImportProfile, LearnProgress,
   Recurring, Rule, Snapshot, Transaction,
 } from './types'
 
 type Table =
-  | 'api_tokens' | 'app_settings' | 'holdings'
+  | 'api_tokens' | 'app_settings' | 'holdings' | 'bank_connections' | 'bank_accounts'
   | 'accounts' | 'categories' | 'transactions' | 'balance_snapshots' | 'budgets'
   | 'goals' | 'recurring' | 'rules' | 'import_profiles' | 'learn_progress'
 
@@ -86,12 +86,18 @@ export const useAppSettings = () =>
   } })
 export const useHoldings = () =>
   useQuery({ queryKey: ['holdings'], queryFn: async () => num(await fetchAll<Holding>('holdings', 'created_at'), ['quantity', 'avg_price', 'last_price', 'prev_close']) })
+export const useBankConnections = () =>
+  useQuery({ queryKey: ['bank_connections'], queryFn: () => fetchAll<BankConnection>('bank_connections', 'created_at') })
+export const useBankAccounts = () =>
+  useQuery({ queryKey: ['bank_accounts'], queryFn: () => fetchAll<BankAccount>('bank_accounts', 'created_at') })
 export const useLearnProgress = () =>
   useQuery({ queryKey: ['learn_progress'], queryFn: () => fetchAll<LearnProgress>('learn_progress', 'completed_at') })
 
 const AFFECTS: Record<Table, string[]> = {
   api_tokens: ['api_tokens'],
   holdings: ['holdings', 'balances', 'balance_snapshots'],
+  bank_connections: ['bank_connections', 'bank_accounts'],
+  bank_accounts: ['bank_accounts'],
   app_settings: ['app_settings'],
   accounts: ['accounts', 'balances'],
   categories: ['categories'],

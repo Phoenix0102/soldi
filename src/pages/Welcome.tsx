@@ -64,7 +64,7 @@ export default function Welcome() {
     localStorage.setItem(ONBOARDED, '1')
     await supabase.from('app_settings').upsert({ data: { ...(settings?.data ?? {}), onboarded: true }, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
     invalidate('app_settings')
-    go(way === 'applepay' ? '/impostazioni' : way === 'import' ? '/importa' : '/', { replace: true })
+    go(way === 'applepay' ? '/impostazioni?sezione=applepay' : way === 'import' ? '/importa' : '/', { replace: true })
   }
 
   return (

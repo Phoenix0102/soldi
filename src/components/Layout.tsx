@@ -4,6 +4,7 @@ import { LayoutGrid, List, Plus, Target, GraduationCap, Wallet, Upload, Settings
 import { QuickAddProvider, useQuickAdd } from './QuickAdd'
 import { NavLink } from './nav'
 import { NetworkStatus } from './NetworkStatus'
+import { useBankReturn } from './BankSetup'
 import { supportsViewTransitions } from '../lib/motion'
 import { useSwipeTabs } from '../lib/useSwipeTabs'
 
@@ -36,6 +37,7 @@ function Shell() {
   const [swipe, setSwipe] = useState<{ path: string; dir: 'left' | 'right' } | null>(null)
   const go = useCallback((to: string, dir: 'left' | 'right') => { setSwipe({ path: to, dir }); navigate(to) }, [navigate])
   useSwipeTabs(mainRef, pageRef, pathname, go)
+  useBankReturn(useCallback(() => navigate('/impostazioni?sezione=banche'), [navigate]))
 
   // Torna in cima prima che la transizione fotografi la nuova pagina
   useLayoutEffect(() => { window.scrollTo(0, 0) }, [pathname])
