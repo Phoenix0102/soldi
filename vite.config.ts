@@ -34,6 +34,7 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         navigateFallbackDenylist: [/^\/rest\//, /^\/auth\//],
+        importScripts: ['push-sw.js'],
       },
     }),
   ],

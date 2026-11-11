@@ -5,6 +5,8 @@ import { Settings, ChevronRight, CalendarClock, GraduationCap, FileBarChart, Ale
 import { liveAlerts } from '../lib/insights'
 import { useAccounts, useBalances, useBudgets, useCategories, useRecurring, useSnapshots, useTransactions, useLearnProgress, useHoldings } from '../lib/data'
 import { useRefreshQuotes } from '../components/Portfolio'
+import { useAppSettings } from '../lib/data'
+import { useGo } from '../components/nav'
 import { cashflow, inMonth, networth, networthHistory, savingsRate, spendByCategory } from '../lib/finance'
 import { money, percent, monthLabel, shortDate } from '../lib/format'
 import { Guilloche } from '../components/Guilloche'
@@ -27,6 +29,16 @@ export default function Dashboard() {
   const { data: progress = [] } = useLearnProgress()
   const qa = useQuickAdd()
   const [balOpen, setBalOpen] = useState(false)
+  const { data: settings, isFetched: settingsReady } = useAppSettings()
+  const go = useGo()
+  const { isFetched: txReady } = useTransactions()
+  const { isFetched: snapsReady } = useSnapshots()
+  // Primo avvio: nessun saldo e nessun movimento → configurazione guidata
+  useEffect(() => {
+    if (!settingsReady || !txReady || !snapsReady) return
+    if (localStorage.getItem('soldi-onboarded') || settings?.data?.onboarded) return
+    if (!txs.length && !snaps.length) go('/benvenuto', { replace: true })
+  }, [settingsReady, txReady, snapsReady]) // eslint-disable-line react-hooks/exhaustive-deps
   const { data: holdings = [], isFetched: holdingsReady } = useHoldings()
   const refreshQuotes = useRefreshQuotes()
   // Il valore degli investimenti si aggiorna da solo se le quotazioni hanno più di 3 ore

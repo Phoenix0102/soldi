@@ -19,6 +19,7 @@ const loaders = {
   impostazioni: () => import('./pages/Settings'),
   smista: () => import('./pages/Triage'),
   resoconto: () => import('./pages/Report'),
+  benvenuto: () => import('./pages/Welcome'),
 }
 
 const routes: RouteObject[] = [{
@@ -35,6 +36,7 @@ const routes: RouteObject[] = [{
     { path: 'impostazioni', lazy: page(loaders.impostazioni) },
     { path: 'smista', lazy: page(loaders.smista) },
     { path: 'resoconto', lazy: page(loaders.resoconto) },
+    { path: 'benvenuto', lazy: page(loaders.benvenuto) },
     { path: '*', element: <Navigate to="/" replace /> },
   ],
 }]

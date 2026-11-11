@@ -1,15 +1,18 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Download, LogOut, Plus, Trash2, Lock, KeyRound } from 'lucide-react'
+import { Download, LogOut, Plus, Trash2, Lock, KeyRound, ScanFace } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAccounts, useCategories, useRules, useTable, useTransactions } from '../lib/data'
 import { getTheme, setTheme, type Theme } from '../lib/theme'
 import { clearPin, hasPin, lockMinutes, setLockMinutes } from '../auth/pin'
 import { PinSetup } from '../auth/Gate'
+import { Link } from '../components/nav'
 import { Badge, COLORS, ICON_NAMES, Icon } from '../components/Icon'
 import { Label, PageHeader, Segmented, Sheet, useToast } from '../components/ui'
 import type { Category, Rule } from '../lib/types'
 import { ApplePaySetup } from '../components/ApplePaySetup'
+import { NotifySetup } from '../components/NotifySetup'
+import { bioAvailable, bioEnabled, disableBio, enableBio } from '../lib/biometric'
 
 export default function SettingsPage() {
   const toast = useToast()
@@ -18,6 +21,9 @@ export default function SettingsPage() {
   const [pinSetup, setPinSetup] = useState(false)
   const [lock, setLock] = useState(lockMinutes())
   const [pwOpen, setPwOpen] = useState(false)
+  const [bioOk, setBioOk] = useState(false)
+  const [bioOn, setBioOn] = useState(bioEnabled())
+  useEffect(() => { bioAvailable().then(setBioOk) }, [])
 
   if (pinSetup) return createPortal(<div className="fixed inset-0 z-[70]"><PinSetup onDone={() => { setPinSetup(false); setPinOn(hasPin()); toast('PIN impostato') }} /></div>, document.body)
 
@@ -45,6 +51,14 @@ export default function SettingsPage() {
                 </select>
               </Row>
             )}
+            {bioOk && pinOn && (
+              <Row icon={<ScanFace size={18} />} title="Face ID o impronta" text={bioOn ? 'Sblocchi l\'app senza digitare il PIN' : 'Al posto del PIN, che resta come riserva'}>
+                <button className="btn btn-ghost !py-1.5" onClick={async () => {
+                  if (bioOn) { disableBio(); setBioOn(false); toast('Face ID disattivato'); return }
+                  try { await enableBio(); setBioOn(true); toast('Face ID attivo') } catch { toast('Attivazione annullata', { tone: 'err' }) }
+                }}>{bioOn ? 'Disattiva' : 'Attiva'}</button>
+              </Row>
+            )}
             <Row icon={<KeyRound size={18} />} title="Chiave di accesso" text="Serve per collegare un nuovo dispositivo">
               <button className="btn btn-ghost !py-1.5" onClick={() => setPwOpen(true)}>Cambia</button>
             </Row>
@@ -54,10 +68,12 @@ export default function SettingsPage() {
           </div>
         </Section>
 
+        <NotifySetup />
         <ApplePaySetup />
         <CategoriesSection />
         <RulesSection />
         <ExportSection />
+        <p className="text-sm text-muted"><Link to="/benvenuto" className="underline underline-offset-4">Rifai la configurazione guidata</Link></p>
       </div>
       {pwOpen && <PasswordSheet onClose={() => setPwOpen(false)} />}
     </div>

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { useQueryClient } from '@tanstack/react-query'
-import { Delete, Eye, EyeOff } from 'lucide-react'
+import { Delete, Eye, EyeOff, ScanFace } from 'lucide-react'
+import { bioEnabled, verifyBio } from '../lib/biometric'
 import { supabase, OWNER_EMAIL } from '../lib/supabase'
 import { checkPin, hasPin, lockMinutes, pinSkipped, setPin, skipPin } from './pin'
 import { Guilloche } from '../components/Guilloche'
@@ -95,7 +96,7 @@ function Login({ onDone }: { onDone: () => void }) {
   )
 }
 
-function PinPad({ title, subtitle, onComplete, error }: { title: string; subtitle?: string; onComplete: (pin: string) => void; error?: string }) {
+function PinPad({ title, subtitle, onComplete, error, extra }: { title: string; subtitle?: string; onComplete: (pin: string) => void; error?: string; extra?: ReactNode }) {
   const [pin, setPinVal] = useState('')
   const LEN = 5
   const press = (d: string) => {
@@ -127,7 +128,7 @@ function PinPad({ title, subtitle, onComplete, error }: { title: string; subtitl
           {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
             <button key={d} onClick={() => press(d)} className="num aspect-square rounded-full bg-white/8 text-2xl font-medium hover:bg-white/15 active:bg-white/25">{d}</button>
           ))}
-          <span />
+          {extra ?? <span />}
           <button onClick={() => press('0')} className="num aspect-square rounded-full bg-white/8 text-2xl font-medium hover:bg-white/15 active:bg-white/25">0</button>
           <button onClick={() => setPinVal((p) => p.slice(0, -1))} className="flex aspect-square items-center justify-center rounded-full opacity-80 hover:bg-white/10" aria-label="Cancella"><Delete /></button>
         </div>
@@ -139,8 +140,15 @@ function PinPad({ title, subtitle, onComplete, error }: { title: string; subtitl
 function PinLock({ onUnlock }: { onUnlock: () => void }) {
   const [err, setErr] = useState('')
   const [tries, setTries] = useState(0)
+  const bio = bioEnabled()
+  const tried = useRef(false)
+  const tryBio = async () => { if (await verifyBio()) onUnlock() }
+  // Face ID parte da solo all'apertura; se il telefono lo blocca resta il pulsante
+  useEffect(() => { if (bio && !tried.current) { tried.current = true; tryBio() } }) // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <PinPad title="Inserisci il PIN" error={err} onComplete={async (p) => {
+    <PinPad title="Inserisci il PIN" error={err}
+      extra={bio ? <button onClick={tryBio} className="flex aspect-square items-center justify-center rounded-full opacity-90 hover:bg-white/10" aria-label="Sblocca con Face ID o impronta"><ScanFace size={28} /></button> : undefined}
+      onComplete={async (p) => {
       if (await checkPin(p)) onUnlock()
       else {
         const t = tries + 1
