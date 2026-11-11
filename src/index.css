@@ -131,7 +131,7 @@ html[data-dir="forward"]::view-transition-old(page) { animation: vt-out-left .26
 html[data-dir="forward"]::view-transition-new(page) { animation: vt-in-right .38s var(--ease-out) both; }
 html[data-dir="back"]::view-transition-old(page) { animation: vt-out-right .26s cubic-bezier(.4,0,1,1) both; }
 html[data-dir="back"]::view-transition-new(page) { animation: vt-in-left .38s var(--ease-out) both; }
-::view-transition-group(tab-pill), ::view-transition-group(side-pill) { animation-duration: .42s; animation-timing-function: var(--ease-spring); }
+::view-transition-group(side-pill) { animation-duration: .42s; animation-timing-function: var(--ease-spring); }
 @keyframes vt-fade-out { to { opacity: 0; } }
 @keyframes vt-fade-in { from { opacity: 0; transform: translateY(8px); } }
 @keyframes vt-out-left { to { opacity: 0; transform: translateX(-32px); } }
@@ -148,8 +148,11 @@ html[data-dir="back"]::view-transition-new(page) { animation: vt-in-left .38s va
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
 
 /* Icona della tab attiva e pulsante + */
-.tab-pop { animation: tab-pop .38s var(--ease-spring); }
-@keyframes tab-pop { 40% { transform: scale(1.18) translateY(-1px); } }
+/* Tab bar: indicatore che scivola, nessun rimbalzo */
+.tab-indicator { transition: transform .32s cubic-bezier(.32,.72,0,1), opacity .2s ease; will-change: transform; }
+.tab-link { transition: color .25s ease; -webkit-tap-highlight-color: transparent; }
+.tab-icon { transition: transform .18s ease; }
+.tab-link:active .tab-icon { transform: scale(.88); }
 .fab { transition: transform .2s var(--ease-spring), box-shadow .2s; }
 .fab:hover { transform: translateY(-2px); }
 .fab:active { transform: scale(.9); }
@@ -190,8 +193,9 @@ html[data-dir="back"]::view-transition-new(page) { animation: vt-in-left .38s va
 
 @media (prefers-reduced-motion: reduce) {
   .guilloche, .guilloche path { animation: none; stroke-dashoffset: 0; }
-  .sheet-enter, .sheet-leave, .fade-enter, .fade-leave, .page-enter, .rise, .tab-pop, .bar-fill, .toast-enter, .toast-leave { animation: none; }
+  .sheet-enter, .sheet-leave, .fade-enter, .fade-leave, .page-enter, .rise, .bar-fill, .toast-enter, .toast-leave { animation: none; }
   ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+  .tab-indicator, .tab-icon { transition: none; }
 }
 
 /* iOS ingrandisce la pagina sui campi con testo sotto i 16px */

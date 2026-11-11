@@ -67,18 +67,7 @@ function Shell() {
         </div>
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/85 pb-safe backdrop-blur-xl lg:hidden" aria-label="Navigazione" style={{ viewTransitionName: 'tabbar' }}>
-        <div className="mx-auto grid max-w-md grid-cols-5 items-center px-2">
-          {MAIN.slice(0, 2).map((l) => <TabLink key={l.to} {...l} />)}
-          <div className="flex justify-center">
-            <button onClick={() => qa.open()} aria-label="Nuovo movimento"
-              className="fab -mt-6 flex h-14 w-14 items-center justify-center rounded-full bg-brand text-brand-ink shadow-lg shadow-brand/30">
-              <Plus size={26} />
-            </button>
-          </div>
-          {MAIN.slice(2).map((l) => <TabLink key={l.to} {...l} />)}
-        </div>
-      </nav>
+      <TabBar onAdd={() => qa.open()} />
     </div>
   )
 }
@@ -99,16 +88,38 @@ function SideLink({ to, label, icon: I, end }: L) {
   )
 }
 
-function TabLink({ to, label, icon: I, end }: L) {
+/* Barra in basso: un solo indicatore che scivola sotto la tab attiva */
+const TABS = [MAIN[0], MAIN[1], null, MAIN[2], MAIN[3]] as const
+
+function TabBar({ onAdd }: { onAdd: () => void }) {
+  const { pathname } = useLocation()
+  const col = TABS.findIndex((t) => t && (t.end ? pathname === t.to : pathname === t.to || pathname.startsWith(t.to + '/')))
   return (
-    <NavLink to={to} end={end} className={({ isActive }) => `relative flex flex-col items-center gap-1 py-2.5 text-[0.7rem] font-medium transition-colors ${isActive ? 'text-ink' : 'text-faint'}`}>
-      {({ isActive }) => (
-        <>
-          {isActive && <span className="absolute top-1.5 h-8 w-14 rounded-full bg-brand-soft" style={{ viewTransitionName: 'tab-pill' }} />}
-          <I size={22} strokeWidth={isActive ? 2.3 : 1.8} className={`relative ${isActive ? 'tab-pop' : ''}`} />
-          <span className="relative">{label}</span>
-        </>
-      )}
+    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/85 pb-safe backdrop-blur-xl lg:hidden" aria-label="Navigazione" style={{ viewTransitionName: 'tabbar' }}>
+      <div className="relative mx-auto grid max-w-md grid-cols-5 items-center px-2">
+        <span aria-hidden className="tab-indicator pointer-events-none absolute top-1.5 left-2 flex h-8 justify-center"
+          style={{ width: 'calc((100% - 1rem) / 5)', transform: `translateX(${Math.max(col, 0) * 100}%)`, opacity: col < 0 ? 0 : 1 }}>
+          <span className="h-full w-14 rounded-full bg-brand-soft" />
+        </span>
+        {TABS.map((t, i) => t ? <TabLink key={t.to} {...t} active={i === col} /> : (
+          <div key="add" className="flex justify-center">
+            <button onClick={onAdd} aria-label="Nuovo movimento"
+              className="fab -mt-6 flex h-14 w-14 items-center justify-center rounded-full bg-brand text-brand-ink shadow-lg shadow-brand/30">
+              <Plus size={26} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </nav>
+  )
+}
+
+function TabLink({ to, label, icon: I, end, active }: L & { active: boolean }) {
+  return (
+    <NavLink to={to} end={end} aria-current={active ? 'page' : undefined}
+      className={`tab-link relative flex flex-col items-center gap-1 py-2.5 text-[0.7rem] font-medium ${active ? 'text-ink' : 'text-faint'}`}>
+      <I size={22} strokeWidth={active ? 2.2 : 1.8} className="tab-icon relative" />
+      <span className="relative">{label}</span>
     </NavLink>
   )
 }
