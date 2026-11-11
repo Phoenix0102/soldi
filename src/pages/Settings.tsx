@@ -86,10 +86,10 @@ function Row({ icon, title, text, children }: { icon?: React.ReactNode; title: s
 function PasswordSheet({ onClose }: { onClose: () => void }) {
   const toast = useToast()
   const [a, setA] = useState(''), [b, setB] = useState('')
-  const ok = a.length >= 12 && a === b
+  const ok = a.length >= 8 && a === b
   return (
     <Sheet open onClose={onClose} title="Nuova chiave di accesso">
-      <p className="mb-4 text-sm text-muted">Almeno 12 caratteri. Salvala nel gestore password: senza chiave non potrai collegare nuovi dispositivi.</p>
+      <p className="mb-4 text-sm text-muted">Almeno 8 caratteri. Salvala nel gestore password: senza chiave non potrai collegare nuovi dispositivi.</p>
       <div className="space-y-3">
         <input type="password" className="field" placeholder="Nuova chiave" value={a} onChange={(e) => setA(e.target.value)} autoComplete="new-password" />
         <input type="password" className="field" placeholder="Ripeti la chiave" value={b} onChange={(e) => setB(e.target.value)} autoComplete="new-password" />
