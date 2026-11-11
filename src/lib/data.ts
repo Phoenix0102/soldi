@@ -37,13 +37,13 @@ export const useAccounts = () =>
     queryFn: async () => num(await fetchAll<Account>('accounts', 'sort'), ['initial_balance']),
   })
 
+// In cache resta un array (serializzabile), i componenti ricevono una Map
+const toMap = (rows: AccountBalance[]) => new Map(rows.map((r) => [r.account_id, r]))
 export const useBalances = () =>
   useQuery({
     queryKey: ['balances'],
-    queryFn: async () => {
-      const rows = num(await fetchAll<AccountBalance>('account_balances', 'account_id'), ['balance'])
-      return new Map(rows.map((r) => [r.account_id, r]))
-    },
+    queryFn: async () => num(await fetchAll<AccountBalance>('account_balances', 'account_id'), ['balance']),
+    select: toMap,
   })
 
 export const useCategories = () =>

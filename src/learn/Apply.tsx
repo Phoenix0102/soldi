@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from '../components/nav'
 import { subMonths } from 'date-fns'
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useAccounts, useBalances, useCategories, useRecurring, useTransactions } from '../lib/data'
@@ -54,7 +54,7 @@ function Hours() {
   const p = parseAmount(price) ?? 0
   return (
     <div>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Field label="Netto al mese" value={net} onChange={(v) => save('soldi-net', v, setNet)} />
         <Field label="Costi per lavorare" value={costs} onChange={(v) => save('soldi-workcost', v, setCosts)} />
         <Field label="Ore al mese, tragitti inclusi" value={hours} onChange={(v) => save('soldi-workhours', v, setHours)} />
@@ -79,7 +79,7 @@ function Networth() {
   const { income, expense, n } = useLast3()
   const nw = networth(accounts, balances)
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <div><p className="text-sm text-muted">Patrimonio netto oggi</p><p className="num text-2xl font-semibold">{money(nw.total)}</p><p className="text-xs text-muted">{money(nw.assets, true)} di attività, {money(nw.debts, true)} di debiti</p></div>
       <div><p className="text-sm text-muted">Flusso di cassa medio mensile</p><p className={`num text-2xl font-semibold ${income - expense < 0 ? 'text-neg' : ''}`}>{money(income - expense)}</p><p className="text-xs text-muted">media su {n} {n === 1 ? 'mese' : 'mesi'}</p></div>
     </div>

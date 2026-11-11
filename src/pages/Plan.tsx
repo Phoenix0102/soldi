@@ -8,7 +8,7 @@ import { money, parseAmount, round2, shortDate, longDate, todayISO, percent } fr
 import { FREQUENCIES, type Budget, type Frequency, type Goal, type Recurring } from '../lib/types'
 import { supabase } from '../lib/supabase'
 import { Badge, COLORS, ICON_NAMES, Icon } from '../components/Icon'
-import { Bar, Empty, Label, Money, PageHeader, Segmented, Sheet, Spinner, useToast } from '../components/ui'
+import { Bar, Empty, Label, Money, PageHeader, Segmented, Sheet, SkeletonRows, useToast } from '../components/ui'
 
 type Tab = 'budget' | 'goals' | 'recurring'
 
@@ -20,9 +20,11 @@ export default function Plan() {
       <PageHeader title="Piano" subtitle="Decidi prima dove vanno i soldi, poi controlla." />
       <Segmented value={tab} onChange={(t) => setSp({ tab: t })} className="mb-6"
         options={[{ value: 'budget', label: 'Budget' }, { value: 'goals', label: 'Obiettivi' }, { value: 'recurring', label: 'Ricorrenti' }]} />
-      {tab === 'budget' && <BudgetTab />}
-      {tab === 'goals' && <GoalsTab />}
-      {tab === 'recurring' && <RecurringTab />}
+      <div key={tab} className="page-enter">
+        {tab === 'budget' && <BudgetTab />}
+        {tab === 'goals' && <GoalsTab />}
+        {tab === 'recurring' && <RecurringTab />}
+      </div>
     </div>
   )
 }
@@ -47,7 +49,7 @@ function BudgetTab() {
     return m
   }, [txs])
 
-  if (isLoading || !categories) return <Spinner />
+  if (isLoading || !categories) return <SkeletonRows />
   const exp = categories.filter((c) => c.kind === 'expense' && !c.archived)
   const totalBudget = budgets.reduce((s, b) => s + b.amount, 0)
   const totalSpentBudgeted = budgets.reduce((s, b) => s + (spent.get(b.category_id) ?? 0), 0)
@@ -93,8 +95,8 @@ function BudgetTab() {
       </section>
 
       <div className="mt-8 space-y-8">
-        {groups.map((g) => (
-          <section key={g}>
+        {groups.map((g, gi) => (
+          <section key={g} className="rise" style={{ '--i': gi } as React.CSSProperties}>
             <h3 className="mb-2 px-1 text-sm font-semibold text-muted">{g}</h3>
             <ul className="divide-y divide-line rounded-3xl bg-surface">
               {exp.filter((c) => (c.group_name ?? 'Altro') === g).map((c) => {
@@ -145,7 +147,7 @@ function GoalsTab() {
   const toast = useToast()
   const [form, setForm] = useState<Goal | 'new' | null>(null)
   const [adding, setAdding] = useState<Goal | null>(null)
-  if (isLoading || !goals) return <Spinner />
+  if (isLoading || !goals) return <SkeletonRows n={3} />
   const active = goals.filter((g) => !g.archived)
   const emergency = round2(avgMonthlyExpense(txs, 3) * 6)
 
@@ -158,14 +160,14 @@ function GoalsTab() {
         <Empty title="Nessun obiettivo ancora" text={emergency > 0 ? `Un buon primo obiettivo è il fondo emergenza: 6 mesi di spese, per te circa ${money(emergency, true)}.` : 'Un buon primo obiettivo è il fondo emergenza: da 3 a 6 mesi di spese.'}
           action={<button onClick={() => setForm('new')} className="btn btn-primary">Crea il primo obiettivo</button>} />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
-          {active.map((g) => {
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {active.map((g, gi) => {
             const saved = progressOf(g)
             const left = Math.max(0, g.target_amount - saved)
             const ml = monthsLeft(g.target_date)
             const done = saved >= g.target_amount
             return (
-              <article key={g.id} className="rounded-3xl bg-surface p-5">
+              <article key={g.id} className="rise rounded-3xl bg-surface p-5" style={{ '--i': gi } as React.CSSProperties}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <Badge icon={g.icon} color={g.color} size={44} />
@@ -286,7 +288,7 @@ function RecurringTab() {
   const toast = useToast()
   const [form, setForm] = useState<Recurring | 'new' | null>(null)
   const suggestions = useMemo(() => detectRecurring(txs, items ?? []), [txs, items])
-  if (isLoading || !items) return <Spinner />
+  if (isLoading || !items) return <SkeletonRows />
   const active = items.filter((r) => r.active)
   const monthlyOut = active.filter((r) => r.kind === 'expense').reduce((s, r) => s + monthlyEquivalent(r), 0)
   const monthlyIn = active.filter((r) => r.kind === 'income').reduce((s, r) => s + monthlyEquivalent(r), 0)
@@ -306,8 +308,8 @@ function RecurringTab() {
 
   return (
     <div>
-      <section className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-3xl bg-surface p-5">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="col-span-2 rounded-3xl bg-surface p-5 sm:col-span-1">
           <p className="text-sm text-muted">Spese fisse al mese</p>
           <p className="num mt-1 text-2xl font-semibold">{money(monthlyOut)}</p>
           {income > 0 && <p className="mt-0.5 text-xs text-muted">{percent(monthlyOut / income)} delle entrate di questo mese</p>}

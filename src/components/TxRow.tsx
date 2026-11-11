@@ -8,15 +8,15 @@ export function TxRow({ t, cat, acc, showAccount = true }: { t: Transaction; cat
   const qa = useQuickAdd()
   const transfer = t.kind === 'transfer'
   return (
-    <button onClick={() => qa.edit(t)} className="flex w-full items-center gap-3 rounded-2xl px-2 py-2.5 text-left transition hover:bg-sunken">
+    <button onClick={() => qa.edit(t)} className="press flex w-full items-center gap-3 rounded-2xl px-2 py-2.5 text-left hover:bg-sunken">
       {transfer ? (
         <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sunken text-muted"><ArrowLeftRight size={17} /></span>
       ) : (
         <Badge icon={cat?.icon ?? 'circle'} color={cat?.color ?? '#94a3b8'} />
       )}
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5 truncate font-medium">
-          {t.description || cat?.name || 'Movimento'}
+        <span className="flex min-w-0 items-center gap-1.5 font-medium"><span className="truncate">
+          {t.description || cat?.name || 'Movimento'}</span>
           {t.source === 'receipt' && <Camera size={13} className="shrink-0 text-faint" aria-label="Da scontrino" />}
         </span>
         <span className="block truncate text-sm text-muted">

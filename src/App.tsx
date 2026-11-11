@@ -1,43 +1,59 @@
-import { lazy, Suspense } from 'react'
-import { HashRouter, Route, Routes, Navigate } from 'react-router-dom'
+import { useEffect, type ComponentType } from 'react'
+import { createHashRouter, RouterProvider, Navigate, type RouteObject } from 'react-router-dom'
 import { Gate } from './auth/Gate'
 import { Layout } from './components/Layout'
-import { QuickAddProvider } from './components/QuickAdd'
-import { ToastProvider, Spinner } from './components/ui'
+import { ToastProvider } from './components/ui'
 import Dashboard from './pages/Dashboard'
-const Transactions = lazy(() => import('./pages/Transactions'))
-const Accounts = lazy(() => import('./pages/Accounts'))
-const AccountDetail = lazy(() => import('./pages/AccountDetail'))
-const Plan = lazy(() => import('./pages/Plan'))
-const Learn = lazy(() => import('./pages/Learn'))
-const Lesson = lazy(() => import('./pages/Lesson'))
-const Import = lazy(() => import('./pages/Import'))
-const SettingsPage = lazy(() => import('./pages/Settings'))
+
+// Le pagine si caricano prima della transizione, così l'animazione non mostra mai uno spinner
+const page = (load: () => Promise<{ default: ComponentType }>) => async () => ({ Component: (await load()).default })
+
+const loaders = {
+  movimenti: () => import('./pages/Transactions'),
+  conti: () => import('./pages/Accounts'),
+  conto: () => import('./pages/AccountDetail'),
+  piano: () => import('./pages/Plan'),
+  impara: () => import('./pages/Learn'),
+  lezione: () => import('./pages/Lesson'),
+  importa: () => import('./pages/Import'),
+  impostazioni: () => import('./pages/Settings'),
+}
+
+const routes: RouteObject[] = [{
+  element: <Layout />,
+  children: [
+    { index: true, element: <Dashboard /> },
+    { path: 'movimenti', lazy: page(loaders.movimenti) },
+    { path: 'conti', lazy: page(loaders.conti) },
+    { path: 'conti/:id', lazy: page(loaders.conto) },
+    { path: 'piano', lazy: page(loaders.piano) },
+    { path: 'impara', lazy: page(loaders.impara) },
+    { path: 'impara/:lessonId', lazy: page(loaders.lezione) },
+    { path: 'importa', lazy: page(loaders.importa) },
+    { path: 'impostazioni', lazy: page(loaders.impostazioni) },
+    { path: '*', element: <Navigate to="/" replace /> },
+  ],
+}]
+
+const router = createHashRouter(routes)
+
+/** Precarica tutte le sezioni quando il browser è libero. */
+function Prefetch() {
+  useEffect(() => {
+    const run = () => Object.values(loaders).forEach((l) => l().catch(() => {}))
+    const w = window as Window & { requestIdleCallback?: (cb: () => void) => number }
+    if (w.requestIdleCallback) w.requestIdleCallback(run)
+    else setTimeout(run, 1500)
+  }, [])
+  return null
+}
 
 export default function App() {
   return (
     <ToastProvider>
       <Gate>
-        <HashRouter>
-          <QuickAddProvider>
-            <Suspense fallback={<Spinner />}>
-            <Routes>
-              <Route element={<Layout />}>
-                <Route index element={<Dashboard />} />
-                <Route path="movimenti" element={<Transactions />} />
-                <Route path="conti" element={<Accounts />} />
-                <Route path="conti/:id" element={<AccountDetail />} />
-                <Route path="piano" element={<Plan />} />
-                <Route path="impara" element={<Learn />} />
-                <Route path="impara/:lessonId" element={<Lesson />} />
-                <Route path="importa" element={<Import />} />
-                <Route path="impostazioni" element={<SettingsPage />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Route>
-            </Routes>
-            </Suspense>
-          </QuickAddProvider>
-        </HashRouter>
+        <Prefetch />
+        <RouterProvider router={router} />
       </Gate>
     </ToastProvider>
   )

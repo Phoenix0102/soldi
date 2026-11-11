@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
 import { addMonths, subMonths } from 'date-fns'
 import { ChevronLeft, ChevronRight, Search, Upload } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link } from '../components/nav'
 import { useAccounts, useCategories, useTransactions } from '../lib/data'
 import { cashflow, monthKey } from '../lib/finance'
 import { dayLabel, money, monthLabel } from '../lib/format'
 import { TxRow } from '../components/TxRow'
-import { Empty, PageHeader, Spinner } from '../components/ui'
+import { Empty, PageHeader, SkeletonPage } from '../components/ui'
 import { useQuickAdd } from '../components/QuickAdd'
 
 export default function Transactions() {
@@ -47,7 +47,7 @@ export default function Transactions() {
   const totals = cashflow(filtered)
   const uncategorized = (txs ?? []).filter((t) => !t.category_id && t.kind !== 'transfer').length
 
-  if (isLoading) return <Spinner />
+  if (isLoading) return <SkeletonPage />
 
   return (
     <div>
@@ -56,12 +56,12 @@ export default function Transactions() {
       } />
 
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center rounded-full bg-surface">
+        <div className="flex w-full items-center justify-between rounded-full bg-surface sm:w-auto">
           <button className="rounded-full p-2.5 hover:bg-sunken disabled:opacity-30" disabled={!month} onClick={() => month && setMonth(subMonths(month, 1))} aria-label="Mese precedente"><ChevronLeft size={18} /></button>
           <button onClick={() => setMonth(month ? null : new Date())} className="min-w-36 px-1 text-center font-medium capitalize">{month ? monthLabel(month) : 'Tutti i mesi'}</button>
           <button className="rounded-full p-2.5 hover:bg-sunken disabled:opacity-30" disabled={!month || monthKey(month) >= monthKey(new Date())} onClick={() => month && setMonth(addMonths(month, 1))} aria-label="Mese successivo"><ChevronRight size={18} /></button>
         </div>
-        <label className="relative min-w-52 flex-1">
+        <label className="relative min-w-0 flex-1 basis-60">
           <Search size={17} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-faint" />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca per nome, nota o importo" className="field !rounded-full !bg-surface !pl-10" />
         </label>
@@ -79,19 +79,19 @@ export default function Transactions() {
         <span><span className="text-muted">Saldo </span><span className="num font-semibold">{money(totals.net)}</span></span>
       </div>
 
-      <div className="mt-4">
+      <div className="mt-4" key={`${month ? monthKey(month) : 'all'}|${acc}|${cat}|${kind}`}>
         {groups.length === 0 ? (
           <Empty title="Nessun movimento qui" text={q || acc || cat || kind ? 'Prova a togliere qualche filtro.' : 'Aggiungi un movimento o importa l\'estratto conto della banca.'}
             action={<button onClick={() => qa.open()} className="btn btn-primary">Nuovo movimento</button>} />
-        ) : groups.map(([date, list]) => {
+        ) : groups.map(([date, list], gi) => {
           const day = list.reduce((s, t) => s + (t.kind === 'transfer' ? 0 : t.amount), 0)
           return (
-            <section key={date} className="mb-4">
+            <section key={date} className="rise mb-4" style={{ '--i': gi } as React.CSSProperties}>
               <div className="flex items-baseline justify-between px-2 py-1.5 text-sm">
                 <h3 className="font-medium text-muted capitalize">{dayLabel(date)}</h3>
                 <span className="num text-faint">{day > 0 ? '+' : ''}{money(day)}</span>
               </div>
-              <div className="-mx-0">{list.map((t) => <TxRow key={t.id} t={t} cat={catMap.get(t.category_id ?? '')} acc={accMap.get(t.account_id)} />)}</div>
+              <div>{list.map((t) => <TxRow key={t.id} t={t} cat={catMap.get(t.category_id ?? '')} acc={accMap.get(t.account_id)} />)}</div>
             </section>
           )
         })}

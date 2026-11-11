@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
+import { useQueryClient } from '@tanstack/react-query'
 import { Delete, Eye, EyeOff } from 'lucide-react'
 import { supabase, OWNER_EMAIL } from '../lib/supabase'
 import { checkPin, hasPin, lockMinutes, pinSkipped, setPin, skipPin } from './pin'
@@ -10,16 +11,21 @@ export function Gate({ children }: { children: ReactNode }) {
   const [locked, setLocked] = useState(hasPin())
   const [needsPinSetup, setNeedsPinSetup] = useState(false)
   const last = useRef(Date.now())
+  const qc = useQueryClient()
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
-    const { data } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
+    const { data } = supabase.auth.onAuthStateChange((e, s) => {
+      setSession(s)
+      // All'uscita i dati salvati sul dispositivo vengono cancellati
+      if (e === 'SIGNED_OUT') { qc.clear(); localStorage.removeItem('soldi-cache') }
+    })
     return () => data.subscription.unsubscribe()
-  }, [])
+  }, [qc])
 
   // Blocco automatico per inattività o app in background
   useEffect(() => {
-    if (!session || !hasPin()) return
+    if (!session) return
     const bump = () => { last.current = Date.now() }
     const check = () => { if (hasPin() && Date.now() - last.current > lockMinutes() * 60_000) setLocked(true) }
     const onVis = () => { if (document.visibilityState === 'visible') check(); else bump() }
@@ -60,7 +66,10 @@ function Login({ onDone }: { onDone: () => void }) {
     setBusy(true); setErr('')
     const { error } = await supabase.auth.signInWithPassword({ email: OWNER_EMAIL, password: pw.trim() })
     setBusy(false)
-    if (error) setErr('Chiave di accesso non corretta. Controlla maiuscole e trattini.')
+    if (error) setErr(!navigator.onLine || error.status === 0 || /fetch|network/i.test(error.message)
+      ? 'Nessuna connessione. Controlla internet e riprova.'
+      : error.status === 429 ? 'Troppi tentativi. Aspetta qualche minuto e riprova.'
+      : 'Chiave di accesso non corretta. Controlla maiuscole e trattini.')
     else onDone()
   }
   return (

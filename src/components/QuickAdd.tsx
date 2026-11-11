@@ -1,13 +1,16 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useLocation } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { Camera, ArrowRight, Trash2, Loader2 } from 'lucide-react'
 import { format, subDays } from 'date-fns'
 import { Sheet, Segmented, useToast, Label } from './ui'
 import { Badge } from './Icon'
 import { useAccounts, useCategories, useRules, useTransactions, useInvalidate } from '../lib/data'
+import { haptic } from '../lib/motion'
 import { supabase } from '../lib/supabase'
 import { applyRules, suggestFromHistory } from '../lib/finance'
 import { parseAmount, todayISO, money, round2 } from '../lib/format'
-import type { Transaction } from '../lib/types'
+import type { AccountBalance, Transaction } from '../lib/types'
 
 type Mode = 'expense' | 'income' | 'transfer'
 interface Prefill { mode?: Mode; amount?: number; description?: string; date?: string; account_id?: string; category_id?: string; source?: Transaction['source'] }
@@ -17,6 +20,8 @@ export const useQuickAdd = () => useContext(Ctx)
 
 export function QuickAddProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<{ open: boolean; prefill?: Prefill; editing?: Transaction }>({ open: false })
+  const { pathname } = useLocation()
+  useEffect(() => { setState({ open: false }) }, [pathname])
   return (
     <Ctx.Provider value={{ open: (p) => setState({ open: true, prefill: p }), edit: (t) => setState({ open: true, editing: t }) }}>
       {children}
@@ -92,56 +97,100 @@ function QuickAddSheet({ prefill, editing, onClose }: { prefill?: Prefill; editi
     } finally { setScan(null) }
   }
 
+  const qc = useQueryClient()
+
+  /** Aggiorna subito la cache: la lista e i saldi cambiano prima ancora che il server risponda. */
+  const applyLocal = (remove: string[], add: Transaction[]) => {
+    const prevTx = qc.getQueryData<Transaction[]>(['transactions'])
+    const prevBal = qc.getQueryData<AccountBalance[]>(['balances'])
+    const removed = (prevTx ?? []).filter((t) => remove.includes(t.id))
+    qc.setQueryData<Transaction[]>(['transactions'], (old = []) =>
+      [...add, ...old.filter((t) => !remove.includes(t.id))].sort((x, y) => (x.date === y.date ? y.created_at.localeCompare(x.created_at) : y.date.localeCompare(x.date))))
+    qc.setQueryData<AccountBalance[]>(['balances'], (old) => {
+      if (!old) return old
+      const delta = new Map<string, number>()
+      removed.forEach((t) => delta.set(t.account_id, (delta.get(t.account_id) ?? 0) - t.amount))
+      add.forEach((t) => delta.set(t.account_id, (delta.get(t.account_id) ?? 0) + t.amount))
+      return old.map((b) => (delta.has(b.account_id) ? { ...b, balance: round2(b.balance + delta.get(b.account_id)!) } : b))
+    })
+    return () => { qc.setQueryData(['transactions'], prevTx); qc.setQueryData(['balances'], prevBal) }
+  }
+
+  const makeTx = (p: Partial<Transaction>): Transaction => ({
+    id: crypto.randomUUID(), account_id: accountId, date, amount: 0, description: '', category_id: null, notes: notes || null,
+    kind: 'expense', transfer_group: null, recurring_id: null, source: 'manual', import_hash: null, created_at: new Date().toISOString(), ...p,
+  })
+
   const save = async () => {
-    if (!canSave) return
+    if (!canSave || busy) return
     setBusy(true)
+    const a = round2(amount)
+    let rows: Transaction[]
+    if (mode === 'transfer') {
+      const from = accounts.find((x) => x.id === accountId)!, to = accounts.find((x) => x.id === toAccountId)!
+      const group = crypto.randomUUID()
+      rows = [
+        makeTx({ account_id: from.id, amount: -a, kind: 'transfer', description: desc || `Giroconto verso ${to.name}`, transfer_group: group }),
+        makeTx({ account_id: to.id, amount: a, kind: 'transfer', description: desc || `Giroconto da ${from.name}`, transfer_group: group }),
+      ]
+    } else {
+      rows = [makeTx({
+        id: editing && !editing.transfer_group ? editing.id : crypto.randomUUID(),
+        amount: mode === 'expense' ? -a : a, kind: mode, category_id: categoryId,
+        description: desc.trim() || cats.find((c) => c.id === categoryId)?.name || (mode === 'expense' ? 'Spesa' : 'Entrata'),
+        source: editing && !editing.transfer_group ? editing.source : source,
+        import_hash: editing && !editing.transfer_group ? editing.import_hash : null,
+        created_at: editing?.created_at ?? new Date().toISOString(),
+      })]
+    }
+    const oldIds = editing ? (editing.transfer_group ? pair.map((t) => t.id) : [editing.id]) : []
+    const rollback = applyLocal(oldIds, rows)
+    localStorage.setItem(LAST_ACC, accountId)
+    haptic()
+    toast(editing ? 'Movimento aggiornato' : mode === 'transfer' ? 'Giroconto salvato' : mode === 'expense' ? `Spesa di ${money(a)} salvata` : `Entrata di ${money(a)} salvata`)
+    onClose()
     try {
-      const a = round2(amount)
-      if (mode === 'transfer') {
-        const from = accounts.find((x) => x.id === accountId)!, to = accounts.find((x) => x.id === toAccountId)!
-        if (editing?.transfer_group) await supabase.from('transactions').delete().eq('transfer_group', editing.transfer_group)
-        else if (editing) await supabase.from('transactions').delete().eq('id', editing.id)
-        const group = crypto.randomUUID()
-        const { error } = await supabase.from('transactions').insert([
-          { account_id: from.id, date, amount: -a, kind: 'transfer', description: desc || `Giroconto verso ${to.name}`, transfer_group: group, notes: notes || null },
-          { account_id: to.id, date, amount: a, kind: 'transfer', description: desc || `Giroconto da ${from.name}`, transfer_group: group, notes: notes || null },
-        ])
+      const strip = ({ created_at: _c, ...r }: Transaction) => r
+      if (editing && !editing.transfer_group && mode !== 'transfer') {
+        const { error } = await supabase.from('transactions').update(strip(rows[0])).eq('id', editing.id)
         if (error) throw error
       } else {
-        const row = {
-          account_id: accountId, date, amount: mode === 'expense' ? -a : a, kind: mode,
-          description: desc.trim() || cats.find((c) => c.id === categoryId)?.name || (mode === 'expense' ? 'Spesa' : 'Entrata'),
-          category_id: categoryId, notes: notes || null, transfer_group: null,
-        }
-        if (editing?.transfer_group) {
-          await supabase.from('transactions').delete().eq('transfer_group', editing.transfer_group)
-          const { error } = await supabase.from('transactions').insert({ ...row, source: 'manual' })
-          if (error) throw error
-        } else if (editing) {
-          const { error } = await supabase.from('transactions').update(row).eq('id', editing.id)
-          if (error) throw error
-        } else {
-          const { error } = await supabase.from('transactions').insert({ ...row, source })
+        if (oldIds.length) {
+          const { error } = await supabase.from('transactions').delete().in('id', oldIds)
           if (error) throw error
         }
+        const { error } = await supabase.from('transactions').insert(rows.map(strip))
+        if (error) throw error
       }
-      localStorage.setItem(LAST_ACC, accountId)
-      invalidate('transactions')
-      toast(editing ? 'Movimento aggiornato' : mode === 'transfer' ? 'Giroconto salvato' : mode === 'expense' ? `Spesa di ${money(a)} salvata` : `Entrata di ${money(a)} salvata`)
-      onClose()
     } catch (e) {
-      toast(`Salvataggio non riuscito: ${(e as Error).message}`, { tone: 'err' })
-    } finally { setBusy(false) }
+      rollback()
+      toast(`Non salvato: ${(e as Error).message}`, { tone: 'err' })
+    } finally {
+      invalidate('transactions')
+    }
   }
 
   const remove = async () => {
     if (!editing) return
-    const q = editing.transfer_group
-      ? supabase.from('transactions').delete().eq('transfer_group', editing.transfer_group)
-      : supabase.from('transactions').delete().eq('id', editing.id)
-    const { error } = await q
-    if (error) return toast('Eliminazione non riuscita', { tone: 'err' })
-    invalidate('transactions'); toast('Movimento eliminato'); onClose()
+    const rows = editing.transfer_group ? pair : [editing]
+    const ids = rows.map((t) => t.id)
+    const rollback = applyLocal(ids, [])
+    haptic()
+    onClose()
+    const { error } = await supabase.from('transactions').delete().in('id', ids)
+    if (error) { rollback(); return toast('Eliminazione non riuscita', { tone: 'err' }) }
+    invalidate('transactions')
+    toast(rows.length > 1 ? 'Giroconto eliminato' : 'Movimento eliminato', {
+      action: {
+        label: 'Annulla',
+        run: async () => {
+          applyLocal([], rows)
+          const { error: e2 } = await supabase.from('transactions').insert(rows.map(({ created_at: _c, ...r }) => r))
+          if (e2) toast('Ripristino non riuscito', { tone: 'err' })
+          invalidate('transactions')
+        },
+      },
+    })
   }
 
   const yesterday = format(subDays(new Date(), 1), 'yyyy-MM-dd')

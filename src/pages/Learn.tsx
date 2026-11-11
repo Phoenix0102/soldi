@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link } from '../components/nav'
 import { Check, Clock } from 'lucide-react'
 import { LESSONS, MODULES } from '../learn/content'
 import { useLearnProgress } from '../lib/data'
@@ -14,7 +14,7 @@ export default function Learn() {
     <div>
       <PageHeader title="Impara" subtitle="Le idee migliori dei libri di finanza personale, adattate all'Italia e collegate ai tuoi numeri." />
 
-      <section className="mb-10 grid gap-4 sm:grid-cols-[1fr_auto] sm:items-center">
+      <section className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
         <div>
           <p className="text-sm text-muted">{done.size} di {total} lezioni completate</p>
           <div className="mt-2 max-w-md"><Bar value={done.size} max={total} tone={done.size === total ? 'gold' : 'brand'} /></div>
@@ -27,7 +27,7 @@ export default function Learn() {
           const lessons = LESSONS.filter((l) => l.module === m.id)
           const completed = lessons.filter((l) => done.has(l.id)).length
           return (
-            <li key={m.id} className="grid gap-4 sm:grid-cols-[12rem_1fr]">
+            <li key={m.id} className="rise grid grid-cols-1 gap-4 sm:grid-cols-[12rem_minmax(0,1fr)]" style={{ '--i': mi } as React.CSSProperties}>
               <div>
                 <p className="num text-sm text-muted">Modulo {mi + 1}</p>
                 <h2 className="text-xl font-semibold leading-snug">{m.title}</h2>
@@ -40,7 +40,7 @@ export default function Learn() {
                   const isNext = next?.id === l.id
                   return (
                     <li key={l.id}>
-                      <Link to={`/impara/${l.id}`} className="flex items-start gap-4 px-5 py-4 hover:bg-sunken">
+                      <Link to={`/impara/${l.id}`} className="press flex items-start gap-3 px-4 py-4 hover:bg-sunken sm:gap-4 sm:px-5">
                         <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${p ? 'bg-brand text-brand-ink' : isNext ? 'border-2 border-brand' : 'border border-line'}`}>
                           {p && <Check size={15} strokeWidth={3} />}
                         </span>

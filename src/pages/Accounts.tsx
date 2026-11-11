@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from '../components/nav'
 import { Plus, ChevronRight } from 'lucide-react'
 import { useAccounts, useBalances } from '../lib/data'
 import { networth } from '../lib/finance'
 import { ACCOUNT_TYPES, type AccountType } from '../lib/types'
 import { money, shortDate } from '../lib/format'
-import { Money, PageHeader, Spinner } from '../components/ui'
+import { Money, PageHeader, SkeletonPage } from '../components/ui'
 import { AccountForm } from '../components/AccountForm'
 import { BalanceSheet } from '../components/BalanceSheet'
 
@@ -22,7 +22,7 @@ export default function Accounts() {
   const [adding, setAdding] = useState(false)
   const [bal, setBal] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
-  if (isLoading || !accounts) return <Spinner />
+  if (isLoading || !accounts) return <SkeletonPage />
   const nw = networth(accounts, balances)
   const visible = accounts.filter((a) => showArchived || !a.archived)
 
@@ -37,12 +37,12 @@ export default function Accounts() {
       <button onClick={() => setBal(true)} className="btn btn-ghost mb-6 w-full sm:hidden">Aggiorna saldi</button>
 
       <div className="space-y-8">
-        {GROUPS.map((g) => {
+        {GROUPS.map((g, gi) => {
           const list = visible.filter((a) => g.types.includes(a.type))
           if (!list.length) return null
           const total = list.filter((a) => !a.archived).reduce((s, a) => s + (balances?.get(a.id)?.balance ?? 0), 0)
           return (
-            <section key={g.title}>
+            <section key={g.title} className="rise" style={{ '--i': gi } as React.CSSProperties}>
               <div className="mb-2 flex items-baseline justify-between px-1">
                 <h2 className="font-semibold">{g.title}</h2>
                 <Money value={total} className="text-muted" />
@@ -52,7 +52,7 @@ export default function Accounts() {
                   const b = balances?.get(a.id)
                   return (
                     <li key={a.id}>
-                      <Link to={`/conti/${a.id}`} className={`flex items-center gap-4 px-5 py-4 hover:bg-sunken ${a.archived ? 'opacity-50' : ''}`}>
+                      <Link to={`/conti/${a.id}`} className={`press flex items-center gap-3 px-4 py-4 hover:bg-sunken sm:gap-4 sm:px-5 ${a.archived ? 'opacity-50' : ''}`}>
                         <span className="h-10 w-10 shrink-0 rounded-full" style={{ background: a.color }} />
                         <span className="min-w-0 flex-1">
                           <span className="block truncate font-medium">{a.name}</span>
@@ -60,7 +60,7 @@ export default function Accounts() {
                             {a.archived ? 'Archiviato' : b?.snapshot_date ? `Saldo verificato il ${shortDate(b.snapshot_date)}` : ACCOUNT_TYPES[a.type].label}
                           </span>
                         </span>
-                        <Money value={b?.balance ?? 0} className="text-lg font-semibold" />
+                        <Money value={b?.balance ?? 0} className="shrink-0 font-semibold sm:text-lg" />
                         <ChevronRight size={18} className="text-faint" />
                       </Link>
                     </li>

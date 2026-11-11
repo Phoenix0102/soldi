@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
+import { Link, useGo } from '../components/nav'
 import { ArrowLeft, BookOpen, Check, X, Lightbulb } from 'lucide-react'
 import { LESSONS, MODULES, lessonById, type Block } from '../learn/content'
 import { Apply } from '../learn/Apply'
@@ -16,7 +17,7 @@ function rich(text: string): ReactNode {
 
 export default function Lesson() {
   const { lessonId = '' } = useParams()
-  const nav = useNavigate()
+  const nav = useGo()
   const lesson = lessonById(lessonId)
   const { data: progress = [] } = useLearnProgress()
   const invalidate = useInvalidate()
@@ -65,7 +66,7 @@ export default function Lesson() {
             return (
               <li key={qi}>
                 <p className="font-medium"><span className="num text-muted">{qi + 1}. </span>{q.q}</p>
-                <div className="mt-3 grid gap-2">
+                <div className="mt-3 grid grid-cols-1 gap-2">
                   {q.options.map((o, oi) => {
                     const isRight = oi === q.correct, picked = a === oi
                     return (

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from '../components/nav'
 import { subMonths, startOfMonth, parseISO, differenceInCalendarDays } from 'date-fns'
 import { Settings, ChevronRight, CalendarClock, GraduationCap } from 'lucide-react'
 import { useAccounts, useBalances, useBudgets, useCategories, useRecurring, useSnapshots, useTransactions, useLearnProgress } from '../lib/data'
@@ -10,7 +10,7 @@ import { NetworthSpark, CashflowBars } from '../components/Charts'
 import { Badge } from '../components/Icon'
 import { TxRow } from '../components/TxRow'
 import { BalanceSheet } from '../components/BalanceSheet'
-import { Bar, Empty, Money, Spinner } from '../components/ui'
+import { Bar, CountMoney, Empty, Money, SkeletonPage } from '../components/ui'
 import { useQuickAdd } from '../components/QuickAdd'
 import { LESSONS } from '../learn/content'
 
@@ -37,7 +37,7 @@ export default function Dashboard() {
   }), [txs]) // eslint-disable-line react-hooks/exhaustive-deps
   const byCat = useMemo(() => spendByCategory(inMonth(txs, now)), [txs]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (isLoading || !accounts) return <Spinner />
+  if (isLoading || !accounts) return <SkeletonPage hero />
 
   const active = accounts.filter((a) => !a.archived)
   const missing = active.filter((a) => !balances?.get(a.id)?.snapshot_date && !txs.some((t) => t.account_id === a.id))
@@ -69,14 +69,14 @@ export default function Dashboard() {
         <Guilloche className="pointer-events-none absolute -right-28 -top-36 h-[480px] w-[480px] opacity-50" />
         <div className="relative">
           <p className="text-sm opacity-75">Patrimonio netto</p>
-          <p className="num mt-1 text-[clamp(2.6rem,9vw,4.2rem)] font-semibold leading-none tracking-[-0.04em]">{money(nw.total)}</p>
+          <p className="mt-1 text-[clamp(2.4rem,10vw,4.2rem)] font-semibold leading-none tracking-[-0.04em]"><CountMoney value={nw.total} /></p>
           <p className="num mt-3 text-sm opacity-80">
             {delta >= 0 ? '+' : '−'}{money(Math.abs(delta))} rispetto a fine mese scorso
           </p>
-          <dl className="mt-6 grid grid-cols-3 gap-4 border-t border-white/15 pt-4 text-sm">
-            <div><dt className="opacity-70">Liquidità</dt><dd className="num mt-0.5 font-semibold">{money(nw.liquid, true)}</dd></div>
-            <div><dt className="opacity-70">Investimenti</dt><dd className="num mt-0.5 font-semibold">{money(investments, true)}</dd></div>
-            <div><dt className="opacity-70">Debiti</dt><dd className="num mt-0.5 font-semibold">{money(nw.debts, true)}</dd></div>
+          <dl className="mt-6 grid grid-cols-3 gap-3 border-t border-white/15 pt-4 text-[0.8rem] sm:text-sm">
+            <div className="min-w-0"><dt className="truncate opacity-70">Liquidità</dt><dd className="mt-0.5 font-semibold"><CountMoney value={nw.liquid} round /></dd></div>
+            <div className="min-w-0"><dt className="truncate opacity-70">Investimenti</dt><dd className="mt-0.5 font-semibold"><CountMoney value={investments} round /></dd></div>
+            <div className="min-w-0"><dt className="truncate opacity-70">Debiti</dt><dd className="mt-0.5 font-semibold"><CountMoney value={nw.debts} round /></dd></div>
           </dl>
           <div className="-mx-6 mt-3 sm:-mx-8"><NetworthSpark data={history} /></div>
         </div>
@@ -93,7 +93,7 @@ export default function Dashboard() {
       )}
       <BalanceSheet open={balOpen} onClose={() => setBalOpen(false)} />
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-[1.4fr_1fr]">
+      <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         {/* Questo mese */}
         <section>
           <h2 className="mb-4 text-lg font-semibold">Questo mese</h2>
@@ -115,11 +115,11 @@ export default function Dashboard() {
             <Empty title="Ancora nessuna spesa questo mese" text="Registra la prima con il tasto + oppure importa l'estratto conto." />
           ) : (
             <ul className="space-y-4">
-              {top.map(([cid, amount]) => {
+              {top.map(([cid, amount], i) => {
                 const c = cid ? catMap.get(cid) : undefined
                 const b = budgets.find((x) => x.category_id === cid)
                 return (
-                  <li key={cid ?? 'none'} className="flex items-center gap-3">
+                  <li key={cid ?? 'none'} className="rise flex items-center gap-3" style={{ '--i': i } as React.CSSProperties}>
                     <Badge icon={c?.icon ?? 'circle'} color={c?.color ?? '#94a3b8'} size={36} />
                     <div className="min-w-0 flex-1">
                       <div className="flex justify-between gap-2 text-sm">
@@ -152,7 +152,7 @@ export default function Dashboard() {
         </section>
       </div>
 
-      <div className="mt-10 grid gap-8 lg:grid-cols-[1.4fr_1fr]">
+      <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <section>
           <div className="mb-2 flex items-baseline justify-between">
             <h2 className="text-lg font-semibold">Ultimi movimenti</h2>
@@ -161,7 +161,7 @@ export default function Dashboard() {
           {txs.length === 0 ? (
             <Empty title="Nessun movimento" text="Aggiungi la tua prima spesa: ci vogliono pochi secondi." action={<button onClick={() => qa.open()} className="btn btn-primary">Nuovo movimento</button>} />
           ) : (
-            <div className="-mx-2">{txs.slice(0, 6).map((t) => <TxRow key={t.id} t={t} cat={t.category_id ? catMap.get(t.category_id) : undefined} acc={accMap.get(t.account_id)} />)}</div>
+            <div className="-mx-2">{txs.slice(0, 6).map((t, i) => <div key={t.id} className="rise" style={{ '--i': i } as React.CSSProperties}><TxRow t={t} cat={t.category_id ? catMap.get(t.category_id) : undefined} acc={accMap.get(t.account_id)} /></div>)}</div>
           )}
         </section>
 
@@ -174,7 +174,7 @@ export default function Dashboard() {
             <ul>
               {active.map((a) => (
                 <li key={a.id}>
-                  <Link to={`/conti/${a.id}`} className="-mx-2 flex items-center gap-3 rounded-2xl px-2 py-2.5 hover:bg-sunken">
+                  <Link to={`/conti/${a.id}`} className="press -mx-2 flex items-center gap-3 rounded-2xl px-2 py-2.5 hover:bg-sunken">
                     <span className="h-2.5 w-2.5 rounded-full" style={{ background: a.color }} />
                     <span className="flex-1 truncate">{a.name}</span>
                     <Money value={balances?.get(a.id)?.balance ?? 0} className="font-medium" />
@@ -185,7 +185,7 @@ export default function Dashboard() {
           </div>
 
           {nextLesson && (
-            <Link to={`/impara/${nextLesson.id}`} className="block rounded-3xl bg-brand-soft p-5 transition hover:brightness-[0.98]">
+            <Link to={`/impara/${nextLesson.id}`} className="press block rounded-3xl bg-brand-soft p-5 transition hover:-translate-y-0.5 hover:shadow-md">
               <span className="flex items-center gap-2 text-sm text-muted"><GraduationCap size={16} /> Prossima lezione, {nextLesson.minutes} minuti</span>
               <span className="mt-1 block text-lg font-semibold leading-snug">{nextLesson.title}</span>
               <span className="mt-1 block text-sm text-muted">{nextLesson.summary}</span>
@@ -199,9 +199,9 @@ export default function Dashboard() {
 
 function Stat({ label, value, hint }: { label: string; value: number; hint?: string }) {
   return (
-    <div className="rounded-3xl bg-surface p-4">
-      <p className="text-sm text-muted">{label}</p>
-      <p className={`num mt-1 text-lg font-semibold tracking-[-0.01em] sm:text-xl ${value < 0 ? 'text-neg' : ''}`}>{money(value, true)}</p>
+    <div className="min-w-0 rounded-3xl bg-surface p-3.5 sm:p-4">
+      <p className="truncate text-[0.8rem] text-muted sm:text-sm">{label}</p>
+      <p className={`mt-1 truncate text-lg font-semibold tracking-[-0.01em] sm:text-xl ${value < 0 ? 'text-neg' : ''}`}><CountMoney value={value} round /></p>
       {hint && <p className="mt-0.5 text-xs text-muted">{hint}</p>}
     </div>
   )

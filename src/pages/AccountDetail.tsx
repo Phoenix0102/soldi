@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
+import { Link, useGo } from '../components/nav'
 import { ArrowLeft, Pencil, Archive, Trash2, Scale, ArchiveRestore } from 'lucide-react'
 import { endOfMonth, format, subMonths } from 'date-fns'
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
@@ -10,11 +11,11 @@ import { ACCOUNT_TYPES, type Account } from '../lib/types'
 import { TxRow } from '../components/TxRow'
 import { AccountForm } from '../components/AccountForm'
 import { BalanceSheet } from '../components/BalanceSheet'
-import { Empty, Money, Spinner, useToast } from '../components/ui'
+import { Confirm, Empty, Money, SkeletonPage, useToast } from '../components/ui'
 
 export default function AccountDetail() {
   const { id } = useParams()
-  const nav = useNavigate()
+  const nav = useGo()
   const toast = useToast()
   const { data: accounts } = useAccounts()
   const { data: balances } = useBalances()
@@ -25,6 +26,7 @@ export default function AccountDetail() {
   const [edit, setEdit] = useState(false)
   const [bal, setBal] = useState(false)
   const [limit, setLimit] = useState(30)
+  const [askDelete, setAskDelete] = useState(false)
 
   const acc = accounts?.find((a) => a.id === id)
   const own = useMemo(() => txs.filter((t) => t.account_id === id), [txs, id])
@@ -37,7 +39,7 @@ export default function AccountDetail() {
     })
   }, [acc, txs, snaps])
 
-  if (!accounts) return <Spinner />
+  if (!accounts) return <SkeletonPage />
   if (!acc) return <Empty title="Conto non trovato" action={<Link to="/conti" className="btn btn-ghost">Torna ai conti</Link>} />
 
   const b = balances?.get(acc.id)
@@ -46,7 +48,7 @@ export default function AccountDetail() {
 
   return (
     <div>
-      <button onClick={() => nav(-1)} className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-muted hover:text-ink"><ArrowLeft size={16} /> Indietro</button>
+      <Link to="/conti" className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-muted hover:text-ink"><ArrowLeft size={16} /> Conti</Link>
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-center gap-4">
           <span className="h-14 w-14 rounded-full" style={{ background: acc.color }} />
@@ -100,12 +102,13 @@ export default function AccountDetail() {
         <button className="btn btn-ghost" onClick={async () => { await update.mutateAsync({ id: acc.id, archived: !acc.archived }); toast(acc.archived ? 'Conto ripristinato' : 'Conto archiviato') }}>
           {acc.archived ? <><ArchiveRestore size={17} /> Ripristina</> : <><Archive size={17} /> Archivia</>}
         </button>
-        <button className="btn btn-danger" onClick={async () => {
-          if (!confirm(`Eliminare "${acc.name}" e tutti i suoi ${own.length} movimenti? Non si può annullare.`)) return
-          await remove.mutateAsync(acc.id); toast('Conto eliminato'); nav('/conti')
-        }}><Trash2 size={17} /> Elimina</button>
+        <button className="btn btn-danger" onClick={() => setAskDelete(true)}><Trash2 size={17} /> Elimina</button>
       </div>
 
+      <Confirm open={askDelete} onClose={() => setAskDelete(false)} danger confirmLabel="Elimina conto"
+        title={`Eliminare ${acc.name}?`}
+        text={own.length ? `Verranno eliminati anche i suoi ${own.length} movimenti. Non si può annullare: se vuoi solo nasconderlo, usa Archivia.` : 'Il conto non ha movimenti. Non si può annullare.'}
+        onConfirm={async () => { await remove.mutateAsync(acc.id); setAskDelete(false); toast('Conto eliminato'); nav('/conti') }} />
       {edit && <AccountForm open account={acc} onClose={() => setEdit(false)} />}
       {bal && <BalanceSheet open onlyId={acc.id} onClose={() => setBal(false)} />}
     </div>

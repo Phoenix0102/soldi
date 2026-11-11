@@ -175,7 +175,7 @@ export default function Import() {
         <section className="mt-6 rounded-3xl bg-surface p-5 sm:p-6">
           <h2 className="font-semibold">3. Controlla le colonne</h2>
           <p className="text-sm text-muted">Le ho riconosciute da sole. La scelta viene ricordata per {account?.name}.</p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <ColSelect label="Data" value={map.date} headers={headers} onChange={(v) => changeMap({ date: v })} />
             <ColSelect label="Descrizione" value={map.description} headers={headers} onChange={(v) => changeMap({ description: v })} />
             {map.debit || map.credit ? (

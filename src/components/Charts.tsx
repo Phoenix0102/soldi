@@ -22,7 +22,7 @@ export function NetworthSpark({ data }: { data: { month: Date; value: number }[]
                 <div className="text-xs text-muted capitalize">{monthLabel((payload[0].payload as { month: Date }).month)}</div>
               </div>
             ) : null} />
-          <Area type="monotone" dataKey="value" stroke="var(--note-ink)" strokeWidth={2} fill="url(#nw)" isAnimationActive={false} />
+          <Area type="monotone" dataKey="value" stroke="var(--note-ink)" strokeWidth={2} fill="url(#nw)" animationDuration={1100} animationEasing="ease-out" />
         </AreaChart>
       </ResponsiveContainer>
     </div>
@@ -55,8 +55,8 @@ export function CashflowBars({ data }: { data: { month: Date; income: number; ex
                 </div>
               )
             }} />
-            <Bar dataKey="income" fill="var(--c-in)" radius={[4, 4, 0, 0]} maxBarSize={22} isAnimationActive={false} />
-            <Bar dataKey="expense" fill="var(--c-out)" radius={[4, 4, 0, 0]} maxBarSize={22} isAnimationActive={false} />
+            <Bar dataKey="income" fill="var(--c-in)" radius={[4, 4, 0, 0]} maxBarSize={22} animationDuration={700} />
+            <Bar dataKey="expense" fill="var(--c-out)" radius={[4, 4, 0, 0]} maxBarSize={22} animationDuration={700} animationBegin={120} />
           </BarChart>
         </ResponsiveContainer>
       </div>

@@ -118,15 +118,84 @@ body {
 .guilloche path:nth-child(4) { animation-delay: .45s; }
 @keyframes engrave { to { stroke-dashoffset: 0; } }
 
-.sheet-enter { animation: sheet-up .28s cubic-bezier(.2,.8,.2,1); }
-@keyframes sheet-up { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
-.fade-enter { animation: fade .2s ease-out; }
+/* ---------- Movimento ---------- */
+:root { --ease-out: cubic-bezier(.2,.8,.2,1); --ease-spring: cubic-bezier(.34,1.4,.64,1); }
+
+/* Transizioni tra sezioni (View Transitions API) */
+::view-transition-old(root), ::view-transition-new(root), ::view-transition-old(tabbar), ::view-transition-new(tabbar), ::view-transition-group(tabbar) { animation: none; mix-blend-mode: normal; }
+::view-transition-old(tabbar) { display: none; }
+::view-transition-group(page) { animation-duration: .34s; animation-timing-function: var(--ease-out); }
+::view-transition-old(page) { animation: vt-fade-out .18s ease-in both; }
+::view-transition-new(page) { animation: vt-fade-in .3s var(--ease-out) both; }
+html[data-dir="forward"]::view-transition-old(page) { animation: vt-out-left .26s cubic-bezier(.4,0,1,1) both; }
+html[data-dir="forward"]::view-transition-new(page) { animation: vt-in-right .38s var(--ease-out) both; }
+html[data-dir="back"]::view-transition-old(page) { animation: vt-out-right .26s cubic-bezier(.4,0,1,1) both; }
+html[data-dir="back"]::view-transition-new(page) { animation: vt-in-left .38s var(--ease-out) both; }
+::view-transition-group(tab-pill), ::view-transition-group(side-pill) { animation-duration: .42s; animation-timing-function: var(--ease-spring); }
+@keyframes vt-fade-out { to { opacity: 0; } }
+@keyframes vt-fade-in { from { opacity: 0; transform: translateY(8px); } }
+@keyframes vt-out-left { to { opacity: 0; transform: translateX(-32px); } }
+@keyframes vt-in-right { from { opacity: 0; transform: translateX(48px); } }
+@keyframes vt-out-right { to { opacity: 0; transform: translateX(32px); } }
+@keyframes vt-in-left { from { opacity: 0; transform: translateX(-48px); } }
+
+/* Entrata della pagina quando le View Transitions non ci sono */
+.page-enter { animation: page-in .38s var(--ease-out) both; }
+@keyframes page-in { from { opacity: 0; transform: translateY(10px); } }
+
+/* Elementi delle liste che entrano in sequenza */
+.rise { animation: rise .45s var(--ease-out) both; animation-delay: calc(min(var(--i, 0), 12) * 35ms); }
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } }
+
+/* Icona della tab attiva e pulsante + */
+.tab-pop { animation: tab-pop .38s var(--ease-spring); }
+@keyframes tab-pop { 40% { transform: scale(1.18) translateY(-1px); } }
+.fab { transition: transform .2s var(--ease-spring), box-shadow .2s; }
+.fab:hover { transform: translateY(-2px); }
+.fab:active { transform: scale(.9); }
+
+/* Barre che si riempiono */
+.bar-fill { transform-origin: left; animation: bar-grow .8s var(--ease-out) both; transition: width .5s var(--ease-out), background-color .3s; }
+@keyframes bar-grow { from { transform: scaleX(0); } }
+
+/* Righe toccabili */
+.press { transition: transform .15s var(--ease-out), background-color .15s; }
+.press:active { transform: scale(.985); }
+
+/* Caricamento */
+.skeleton { background: linear-gradient(90deg, var(--sunken) 0%, var(--line) 50%, var(--sunken) 100%); background-size: 200% 100%; animation: shimmer 1.3s linear infinite; border-radius: 12px; }
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+/* Pannelli e notifiche */
+.sheet-enter { animation: sheet-up .34s var(--ease-out); }
+.sheet-leave { animation: sheet-down .22s cubic-bezier(.4,0,1,1) forwards; }
+@keyframes sheet-up { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes sheet-down { to { transform: translateY(60px); opacity: 0; } }
+@media (min-width: 640px) {
+  @keyframes sheet-up { from { transform: translateY(16px) scale(.97); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes sheet-down { to { transform: translateY(10px) scale(.98); opacity: 0; } }
+}
+.fade-enter { animation: fade .22s ease-out; }
+.fade-leave { animation: fade-out .22s ease-in forwards; }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fade-out { to { opacity: 0; } }
+.toast-enter { animation: toast-in .35s var(--ease-spring); }
+.toast-leave { animation: toast-out .2s ease-in forwards; }
+@keyframes toast-in { from { transform: translateY(16px) scale(.95); opacity: 0; } }
+@keyframes toast-out { to { transform: translateY(8px) scale(.97); opacity: 0; } }
+
+/* Il pannello verde: il rosone si disegna e poi ruota lentissimo */
+.guilloche { animation: drift 120s linear infinite; transform-origin: center; }
+@keyframes drift { to { transform: rotate(360deg); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .guilloche path { animation: none; stroke-dashoffset: 0; }
-  .sheet-enter, .fade-enter { animation: none; }
+  .guilloche, .guilloche path { animation: none; stroke-dashoffset: 0; }
+  .sheet-enter, .sheet-leave, .fade-enter, .fade-leave, .page-enter, .rise, .tab-pop, .bar-fill, .toast-enter, .toast-leave { animation: none; }
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
 }
+
+/* iOS ingrandisce la pagina sui campi con testo sotto i 16px */
+@media (max-width: 640px) { .field, select { font-size: 16px; } }
 
 .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
 .pt-safe { padding-top: env(safe-area-inset-top); }
