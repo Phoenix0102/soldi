@@ -1,0 +1,138 @@
+@import "@fontsource-variable/schibsted-grotesk";
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Schibsted Grotesk Variable", ui-sans-serif, system-ui, sans-serif;
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-brand: var(--brand);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-soft: var(--brand-soft);
+  --color-note: var(--note);
+  --color-note-ink: var(--note-ink);
+  --color-pos: var(--pos);
+  --color-neg: var(--neg);
+  --color-gold: var(--gold);
+  --color-c-in: var(--c-in);
+  --color-c-out: var(--c-out);
+}
+
+:root {
+  --paper: #f2f4f1;
+  --surface: #ffffff;
+  --sunken: #e8ece8;
+  --ink: #102a22;
+  --muted: #5a6b63;
+  --faint: #8a9a93;
+  --line: #dbe2dd;
+  --brand: #0f4d3a;
+  --brand-ink: #f2f4f1;
+  --brand-soft: #dcebe3;
+  --note: #0f4d3a;
+  --note-ink: #e9f2ed;
+  --pos: #0d7d55;
+  --neg: #c03f38;
+  --gold: #a87b22;
+  --c-in: #0d7d55;
+  --c-out: #b07a1a;
+  color-scheme: light;
+}
+
+.dark {
+  --paper: #0b1512;
+  --surface: #12201b;
+  --sunken: #0f1b17;
+  --ink: #e6eee9;
+  --muted: #93a79e;
+  --faint: #667a71;
+  --line: #213530;
+  --brand: #6fd3a8;
+  --brand-ink: #0b1512;
+  --brand-soft: #16342a;
+  --note: #133b2e;
+  --note-ink: #e6eee9;
+  --pos: #6fd3a8;
+  --neg: #f07a70;
+  --gold: #dcb35e;
+  --c-in: #33a374;
+  --c-out: #c0882a;
+  color-scheme: dark;
+}
+
+html, body, #root { min-height: 100%; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01";
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.num { font-variant-numeric: lining-nums; }
+
+:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 6px; }
+
+@layer base {
+  input, select, textarea { font: inherit; color: inherit; }
+}
+
+@layer components {
+
+.field {
+  width: 100%;
+  background: var(--sunken);
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 0.7rem 0.85rem;
+  outline: none;
+  transition: border-color .15s, background .15s;
+}
+.field:focus { border-color: var(--brand); background: var(--surface); }
+.field:focus-visible { outline: none; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
+  border-radius: 999px; padding: .65rem 1.15rem; font-weight: 600;
+  transition: transform .1s, opacity .15s, background .15s;
+}
+.btn:active { transform: scale(.97); }
+.btn:disabled { opacity: .5; pointer-events: none; }
+.btn-primary { background: var(--brand); color: var(--brand-ink); }
+.btn-ghost { background: var(--sunken); color: var(--ink); }
+.btn-danger { background: color-mix(in oklab, var(--neg) 14%, transparent); color: var(--neg); }
+
+}
+
+/* Guilloché: si disegna una sola volta al caricamento */
+.guilloche path { stroke-dasharray: 1; stroke-dashoffset: 1; animation: engrave 2.4s cubic-bezier(.4,0,.2,1) forwards; }
+.guilloche path:nth-child(2) { animation-delay: .15s; }
+.guilloche path:nth-child(3) { animation-delay: .3s; }
+.guilloche path:nth-child(4) { animation-delay: .45s; }
+@keyframes engrave { to { stroke-dashoffset: 0; } }
+
+.sheet-enter { animation: sheet-up .28s cubic-bezier(.2,.8,.2,1); }
+@keyframes sheet-up { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+.fade-enter { animation: fade .2s ease-out; }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .guilloche path { animation: none; stroke-dashoffset: 0; }
+  .sheet-enter, .fade-enter { animation: none; }
+}
+
+.pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+.pt-safe { padding-top: env(safe-area-inset-top); }
+.scrollbar-none::-webkit-scrollbar { display: none; }
+.scrollbar-none { scrollbar-width: none; }
+
+.prose-lesson p { margin: 0 0 1rem; line-height: 1.65; }
+.prose-lesson strong { font-weight: 650; }
+@keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-8px)} 75%{transform:translateX(8px)} }
