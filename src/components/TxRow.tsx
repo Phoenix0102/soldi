@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Camera } from 'lucide-react'
+import { ArrowLeftRight, Camera, Zap } from 'lucide-react'
 import { Badge } from './Icon'
 import type { Account, Category, Transaction } from '../lib/types'
 import { money } from '../lib/format'
@@ -18,6 +18,7 @@ export function TxRow({ t, cat, acc, showAccount = true }: { t: Transaction; cat
         <span className="flex min-w-0 items-center gap-1.5 font-medium"><span className="truncate">
           {t.description || cat?.name || 'Movimento'}</span>
           {t.source === 'receipt' && <Camera size={13} className="shrink-0 text-faint" aria-label="Da scontrino" />}
+          {t.source === 'shortcut' && <Zap size={13} className="shrink-0 text-faint" aria-label="Da Apple Pay" />}
         </span>
         <span className="block truncate text-sm text-muted">
           {transfer ? 'Giroconto' : cat?.name ?? 'Da categorizzare'}

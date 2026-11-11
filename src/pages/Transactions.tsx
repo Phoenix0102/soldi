@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { addMonths, subMonths } from 'date-fns'
-import { ChevronLeft, ChevronRight, Search, Upload } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Search, Sparkles, Upload } from 'lucide-react'
 import { Link } from '../components/nav'
 import { useAccounts, useCategories, useTransactions } from '../lib/data'
 import { cashflow, monthKey } from '../lib/finance'
@@ -52,7 +52,10 @@ export default function Transactions() {
   return (
     <div>
       <PageHeader title="Movimenti" right={
-        <Link to="/importa" className="btn btn-ghost"><Upload size={17} /> <span className="hidden sm:inline">Importa estratto conto</span><span className="sm:hidden">Importa</span></Link>
+        <div className="flex gap-2">
+          {uncategorized > 0 && <Link to="/smista" className="btn btn-primary"><Sparkles size={16} /> Smista <span className="num rounded-full bg-brand-ink/20 px-1.5 text-xs">{uncategorized}</span></Link>}
+          <Link to="/importa" className="btn btn-ghost"><Upload size={17} /> <span className="hidden sm:inline">Importa estratto conto</span><span className="sm:hidden">Importa</span></Link>
+        </div>
       } />
 
       <div className="flex flex-wrap items-center gap-3">

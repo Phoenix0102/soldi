@@ -9,6 +9,7 @@ import { PinSetup } from '../auth/Gate'
 import { Badge, COLORS, ICON_NAMES, Icon } from '../components/Icon'
 import { Label, PageHeader, Segmented, Sheet, useToast } from '../components/ui'
 import type { Category, Rule } from '../lib/types'
+import { ApplePaySetup } from '../components/ApplePaySetup'
 
 export default function SettingsPage() {
   const toast = useToast()
@@ -53,6 +54,7 @@ export default function SettingsPage() {
           </div>
         </Section>
 
+        <ApplePaySetup />
         <CategoriesSection />
         <RulesSection />
         <ExportSection />

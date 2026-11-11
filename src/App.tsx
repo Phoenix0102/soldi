@@ -17,6 +17,7 @@ const loaders = {
   lezione: () => import('./pages/Lesson'),
   importa: () => import('./pages/Import'),
   impostazioni: () => import('./pages/Settings'),
+  smista: () => import('./pages/Triage'),
 }
 
 const routes: RouteObject[] = [{
@@ -31,6 +32,7 @@ const routes: RouteObject[] = [{
     { path: 'impara/:lessonId', lazy: page(loaders.lezione) },
     { path: 'importa', lazy: page(loaders.importa) },
     { path: 'impostazioni', lazy: page(loaders.impostazioni) },
+    { path: 'smista', lazy: page(loaders.smista) },
     { path: '*', element: <Navigate to="/" replace /> },
   ],
 }]

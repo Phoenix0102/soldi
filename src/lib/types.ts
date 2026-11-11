@@ -14,6 +14,7 @@ export interface Account {
   include_in_networth: boolean
   archived: boolean
   sort: number
+  wallet_match: string | null
 }
 
 export interface AccountBalance {
@@ -44,7 +45,7 @@ export interface Transaction {
   kind: TxKind
   transfer_group: string | null
   recurring_id: string | null
-  source: 'manual' | 'csv' | 'bank' | 'receipt'
+  source: 'manual' | 'csv' | 'bank' | 'receipt' | 'shortcut'
   import_hash: string | null
   created_at: string
 }
@@ -109,6 +110,9 @@ export interface ImportMapping {
   invert: boolean
   skipRows: number
 }
+
+export interface ApiToken { id: string; label: string; last_used_at: string | null; created_at: string }
+export interface AppSettings { user_id: string; default_account_id: string | null; data: Record<string, unknown> }
 
 export interface LearnProgress {
   lesson_id: string

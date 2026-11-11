@@ -8,7 +8,8 @@ import { Badge } from './Icon'
 import { useAccounts, useCategories, useRules, useTransactions, useInvalidate } from '../lib/data'
 import { haptic } from '../lib/motion'
 import { supabase } from '../lib/supabase'
-import { applyRules, suggestFromHistory } from '../lib/finance'
+import { applyRules, ruleKeyFor, suggestFromHistory } from '../lib/finance'
+import { useLearnRule } from '../lib/useLearnRule'
 import { parseAmount, todayISO, money, round2 } from '../lib/format'
 import type { AccountBalance, Transaction } from '../lib/types'
 
@@ -98,6 +99,7 @@ function QuickAddSheet({ prefill, editing, onClose }: { prefill?: Prefill; editi
   }
 
   const qc = useQueryClient()
+  const learn = useLearnRule()
 
   /** Aggiorna subito la cache: la lista e i saldi cambiano prima ancora che il server risponda. */
   const applyLocal = (remove: string[], add: Transaction[]) => {
@@ -147,7 +149,14 @@ function QuickAddSheet({ prefill, editing, onClose }: { prefill?: Prefill; editi
     const rollback = applyLocal(oldIds, rows)
     localStorage.setItem(LAST_ACC, accountId)
     haptic()
-    toast(editing ? 'Movimento aggiornato' : mode === 'transfer' ? 'Giroconto salvato' : mode === 'expense' ? `Spesa di ${money(a)} salvata` : `Entrata di ${money(a)} salvata`)
+    // Categoria cambiata a mano: propongo di ricordarla per quell'esercente
+    const changedCat = editing && mode !== 'transfer' && categoryId && categoryId !== editing.category_id && ruleKeyFor(rows[0].description).length >= 3
+    const key = changedCat ? ruleKeyFor(rows[0].description) : ''
+    toast(editing ? 'Movimento aggiornato' : mode === 'transfer' ? 'Giroconto salvato' : mode === 'expense' ? `Spesa di ${money(a)} salvata` : `Entrata di ${money(a)} salvata`,
+      changedCat ? { action: { label: `Usa sempre per ${key}`, run: async () => {
+        const r = await learn(rows[0].description, categoryId!)
+        toast(r.applied ? `Regola creata, applicata ad altri ${r.applied} movimenti` : 'Regola creata')
+      } } } : undefined)
     onClose()
     try {
       const strip = ({ created_at: _c, ...r }: Transaction) => r

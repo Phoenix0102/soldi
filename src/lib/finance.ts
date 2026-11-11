@@ -180,3 +180,11 @@ export function compound(monthly: number, years: number, annualRate: number, ini
   }
   return series
 }
+
+/** Parola chiave per una regola: il nome dell'esercente ripulito (1 o 2 parole). */
+export function ruleKeyFor(description: string) {
+  const words = normalizeDesc(description).split(' ').filter((w) => w.length > 1)
+  if (!words.length) return ''
+  const key = words[0].length >= 4 || words.length === 1 ? words[0] : `${words[0]} ${words[1]}`
+  return key.toUpperCase()
+}

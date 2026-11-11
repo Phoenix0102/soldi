@@ -14,6 +14,7 @@ export function AccountForm({ open, onClose, account }: { open: boolean; onClose
   const [institution, setInstitution] = useState(account?.institution ?? '')
   const [color, setColor] = useState(account?.color ?? COLORS[6])
   const [include, setInclude] = useState(account?.include_in_networth ?? true)
+  const [wallet, setWallet] = useState(account?.wallet_match ?? '')
   const [balance, setBalance] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -21,7 +22,7 @@ export function AccountForm({ open, onClose, account }: { open: boolean; onClose
     if (!name.trim()) return
     setBusy(true)
     try {
-      const row = { name: name.trim(), type, institution: institution.trim() || null, color, include_in_networth: include }
+      const row = { name: name.trim(), type, institution: institution.trim() || null, color, include_in_networth: include, wallet_match: wallet.trim() || null }
       if (account) {
         await update.mutateAsync({ id: account.id, ...row })
         toast('Conto aggiornato')
@@ -54,6 +55,13 @@ export function AccountForm({ open, onClose, account }: { open: boolean; onClose
           <label className="block">
             <Label>{type === 'debt' ? 'Quanto devi oggi' : 'Saldo di oggi'}</Label>
             <input className="field num" inputMode="decimal" value={balance} onChange={(e) => setBalance(e.target.value)} placeholder="0,00" />
+          </label>
+        )}
+        {['checking', 'card', 'wallet', 'savings'].includes(type) && (
+          <label className="block">
+            <Label>Nome della carta nel Wallet (Apple Pay)</Label>
+            <input className="field" value={wallet} onChange={(e) => setWallet(e.target.value)} placeholder="Es. Revolut, ING Visa" />
+            <span className="mt-1 block text-xs text-muted">I pagamenti con una carta che contiene questo nome finiscono su questo conto. Più nomi separati da virgola.</span>
           </label>
         )}
         <div>

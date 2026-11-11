@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from './supabase'
 import type {
+  ApiToken, AppSettings,
   Account, AccountBalance, Budget, Category, Goal, ImportProfile, LearnProgress,
   Recurring, Rule, Snapshot, Transaction,
 } from './types'
 
 type Table =
+  | 'api_tokens' | 'app_settings'
   | 'accounts' | 'categories' | 'transactions' | 'balance_snapshots' | 'budgets'
   | 'goals' | 'recurring' | 'rules' | 'import_profiles' | 'learn_progress'
 
@@ -70,10 +72,24 @@ export const useRules = () =>
   useQuery({ queryKey: ['rules'], queryFn: () => fetchAll<Rule>('rules', 'priority', false) })
 export const useImportProfiles = () =>
   useQuery({ queryKey: ['import_profiles'], queryFn: () => fetchAll<ImportProfile>('import_profiles', 'created_at') })
+export const useApiTokens = () =>
+  useQuery({ queryKey: ['api_tokens'], queryFn: async () => {
+    const { data, error } = await supabase.from('api_tokens').select('id,label,last_used_at,created_at').order('created_at')
+    if (error) throw error
+    return data as ApiToken[]
+  } })
+export const useAppSettings = () =>
+  useQuery({ queryKey: ['app_settings'], queryFn: async () => {
+    const { data, error } = await supabase.from('app_settings').select('*').maybeSingle()
+    if (error) throw error
+    return (data as AppSettings | null)
+  } })
 export const useLearnProgress = () =>
   useQuery({ queryKey: ['learn_progress'], queryFn: () => fetchAll<LearnProgress>('learn_progress', 'completed_at') })
 
 const AFFECTS: Record<Table, string[]> = {
+  api_tokens: ['api_tokens'],
+  app_settings: ['app_settings'],
   accounts: ['accounts', 'balances'],
   categories: ['categories'],
   transactions: ['transactions', 'balances'],

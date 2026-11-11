@@ -53,6 +53,7 @@ export default function Dashboard() {
   const doneIds = new Set(progress.map((p) => p.lesson_id))
   const nextLesson = LESSONS.find((l) => !doneIds.has(l.id))
   const rate = savingsRate(month.income, month.expense)
+  const toSort = txs.filter((t) => !t.category_id && t.kind !== 'transfer').length
 
   return (
     <div>
@@ -92,6 +93,16 @@ export default function Dashboard() {
         </button>
       )}
       <BalanceSheet open={balOpen} onClose={() => setBalOpen(false)} />
+      {toSort > 0 && (
+        <Link to="/smista" className="press mt-4 flex w-full items-center gap-4 rounded-3xl bg-surface p-4 text-left">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-soft font-semibold num">{toSort}</span>
+          <span className="flex-1">
+            <span className="block font-semibold">{toSort === 1 ? 'Un movimento da categorizzare' : `${toSort} movimenti da categorizzare`}</span>
+            <span className="block text-sm text-muted">Smistali con un tocco ciascuno: l'app impara gli esercenti.</span>
+          </span>
+          <ChevronRight className="text-muted" />
+        </Link>
+      )}
 
       <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         {/* Questo mese */}

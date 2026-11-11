@@ -1,17 +1,18 @@
 import { useMemo, useRef, useState } from 'react'
 import { FileUp, ArrowLeft, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { useAccounts, useCategories, useImportProfiles, useRules, useTransactions, useInvalidate, useSnapshots } from '../lib/data'
-import { applyRules, suggestFromHistory } from '../lib/finance'
+import { applyRules, ruleKeyFor, suggestFromHistory } from '../lib/finance'
 import { detect, extract, hashRow, readFile, type FullMapping, type Grid } from '../lib/importer'
 import { supabase } from '../lib/supabase'
 import { money, shortDate } from '../lib/format'
 import type { TxKind } from '../lib/types'
 import { AccountChips } from '../components/QuickAdd'
+import { Link } from '../components/nav'
 import { Label, PageHeader, useToast } from '../components/ui'
 
 interface Row {
   key: string; date: string; amount: number; description: string; balance: number | null
-  category_id: string | null; kind: TxKind; include: boolean; dup: 'exact' | 'maybe' | null; hash: string
+  category_id: string | null; kind: TxKind; include: boolean; dup: 'exact' | 'maybe' | null; hash: string; touched?: boolean
 }
 
 const TRANSFER_HINT = /(giroconto|ricarica|top.?up|trasferimento tra|bonifico a (me|mio)|own account|to pocket|da pocket|exchange|cambio valuta)/i
@@ -35,7 +36,8 @@ export default function Import() {
   const [rows, setRows] = useState<Row[]>([])
   const [skipped, setSkipped] = useState(0)
   const [busy, setBusy] = useState(false)
-  const [done, setDone] = useState<{ n: number; snapshot: boolean } | null>(null)
+  const [done, setDone] = useState<{ n: number; snapshot: boolean; learned: number; toSort: number } | null>(null)
+  const [rememberChoices, setRememberChoices] = useState(true)
 
   const account = accounts.find((a) => a.id === accountId)
   const otherInstitutions = useMemo(
@@ -120,8 +122,20 @@ export default function Import() {
           snapshot = true
         }
       }
-      invalidate('transactions', 'import_profiles', 'balance_snapshots')
-      setDone({ n: sel.length, snapshot })
+      // Le categorie scelte a mano diventano regole per i prossimi import
+      let learned = 0
+      if (rememberChoices) {
+        const seen = new Set(rules.map((r) => r.pattern.trim().toUpperCase()))
+        const newRules = sel.filter((r) => r.touched && r.category_id && r.kind !== 'transfer').flatMap((r) => {
+          const pattern = ruleKeyFor(r.description)
+          if (pattern.length < 3 || seen.has(pattern)) return []
+          seen.add(pattern)
+          return [{ pattern, category_id: r.category_id, priority: 20 }]
+        })
+        if (newRules.length) { await supabase.from('rules').insert(newRules); learned = newRules.length }
+      }
+      invalidate('transactions', 'import_profiles', 'balance_snapshots', 'rules')
+      setDone({ n: sel.length, snapshot, learned, toSort: sel.filter((r) => !r.category_id && r.kind !== 'transfer').length })
       setRows([]); setGrid(null)
     } catch (e) {
       toast(`Importazione non riuscita: ${(e as Error).message}`, { tone: 'err' })
@@ -141,6 +155,8 @@ export default function Import() {
           <div>
             <p className="font-semibold">{done.n} movimenti importati su {account?.name}</p>
             <p className="text-sm text-muted">{done.snapshot ? 'Ho anche aggiornato il saldo usando quello riportato nel file.' : 'Controlla che il saldo del conto corrisponda a quello della banca; se no, correggilo dalla pagina del conto.'}</p>
+            {done.learned > 0 && <p className="mt-1 text-sm text-muted">Ho imparato {done.learned} {done.learned === 1 ? 'nuovo esercente' : 'nuovi esercenti'} dalle tue scelte.</p>}
+            {done.toSort > 0 && <Link to="/smista" className="btn btn-primary mt-3">Smista i {done.toSort} senza categoria</Link>}
           </div>
         </div>
       )}
@@ -212,7 +228,11 @@ export default function Import() {
                 {skipped > 0 && `, ${skipped} righe ignorate (annullate o senza importo)`}
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="mr-2 inline-flex items-center gap-2 text-sm text-muted">
+                <input type="checkbox" checked={rememberChoices} onChange={(e) => setRememberChoices(e.target.checked)} className="accent-[var(--brand)]" />
+                Ricorda le categorie che scelgo
+              </label>
               <button onClick={() => { setRows([]); setGrid(null); setFileName('') }} className="btn btn-ghost"><ArrowLeft size={16} /> Annulla</button>
               <button onClick={doImport} disabled={!sel.length || busy} className="btn btn-primary">{busy ? 'Importo…' : `Importa ${sel.length} movimenti`}</button>
             </div>
@@ -233,7 +253,7 @@ export default function Import() {
                   <select value={r.kind === 'transfer' ? '__transfer' : r.category_id ?? ''}
                     onChange={(e) => {
                       const v = e.target.value
-                      setRows(rows.map((x, j) => (j === i ? { ...x, kind: v === '__transfer' ? 'transfer' : x.amount > 0 ? 'income' : 'expense', category_id: v && v !== '__transfer' ? v : null } : x)))
+                      setRows(rows.map((x, j) => (j === i ? { ...x, touched: true, kind: v === '__transfer' ? 'transfer' : x.amount > 0 ? 'income' : 'expense', category_id: v && v !== '__transfer' ? v : null } : x)))
                     }}
                     className={`field col-span-3 !py-1.5 text-sm sm:col-span-1 ${r.category_id || r.kind === 'transfer' ? '' : '!bg-gold/10'}`}>
                     <option value="">Categoria…</option>
