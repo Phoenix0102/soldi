@@ -142,6 +142,12 @@ html[data-dir="back"]::view-transition-new(page) { animation: vt-in-left .38s va
 /* Entrata della pagina quando le View Transitions non ci sono */
 .page-enter { animation: page-in .38s var(--ease-out) both; }
 @keyframes page-in { from { opacity: 0; transform: translateY(10px); } }
+.swipe-in-left { animation: swipe-in-left .34s cubic-bezier(.32,.72,0,1) both; }
+.swipe-in-right { animation: swipe-in-right .34s cubic-bezier(.32,.72,0,1) both; }
+@keyframes swipe-in-left { from { opacity: .3; transform: translateX(42%); } }
+@keyframes swipe-in-right { from { opacity: .3; transform: translateX(-42%); } }
+html, body { overscroll-behavior-x: none; }
+@media (max-width: 1023px) { body { overflow-x: hidden; } }
 
 /* Elementi delle liste che entrano in sequenza */
 .rise { animation: rise .45s var(--ease-out) both; animation-delay: calc(min(var(--i, 0), 12) * 35ms); }
@@ -193,7 +199,7 @@ html[data-dir="back"]::view-transition-new(page) { animation: vt-in-left .38s va
 
 @media (prefers-reduced-motion: reduce) {
   .guilloche, .guilloche path { animation: none; stroke-dashoffset: 0; }
-  .sheet-enter, .sheet-leave, .fade-enter, .fade-leave, .page-enter, .rise, .bar-fill, .toast-enter, .toast-leave { animation: none; }
+  .sheet-enter, .sheet-leave, .fade-enter, .fade-leave, .page-enter, .swipe-in-left, .swipe-in-right, .rise, .bar-fill, .toast-enter, .toast-leave { animation: none; }
   ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
   .tab-indicator, .tab-icon { transition: none; }
 }

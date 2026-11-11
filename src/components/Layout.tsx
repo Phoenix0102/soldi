@@ -1,10 +1,11 @@
-import { Outlet, useLocation, useNavigationType } from 'react-router-dom'
-import { useEffect, useLayoutEffect } from 'react'
+import { Outlet, useLocation, useNavigate, useNavigationType } from 'react-router-dom'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { LayoutGrid, List, Plus, Target, GraduationCap, Wallet, Upload, Settings } from 'lucide-react'
 import { QuickAddProvider, useQuickAdd } from './QuickAdd'
 import { NavLink } from './nav'
 import { NetworkStatus } from './NetworkStatus'
 import { supportsViewTransitions } from '../lib/motion'
+import { useSwipeTabs } from '../lib/useSwipeTabs'
 
 const MAIN = [
   { to: '/', label: 'Home', icon: LayoutGrid, end: true },
@@ -27,6 +28,13 @@ function Shell() {
   const { pathname } = useLocation()
   const navType = useNavigationType()
   const vt = supportsViewTransitions()
+  const navigate = useNavigate()
+  const mainRef = useRef<HTMLElement>(null)
+  const pageRef = useRef<HTMLDivElement>(null)
+  // Dopo uno swipe la nuova pagina entra dal lato verso cui si è trascinato
+  const [swipe, setSwipe] = useState<{ path: string; dir: 'left' | 'right' } | null>(null)
+  const go = useCallback((to: string, dir: 'left' | 'right') => { setSwipe({ path: to, dir }); navigate(to) }, [navigate])
+  useSwipeTabs(mainRef, pageRef, pathname, go)
 
   // Torna in cima prima che la transizione fotografi la nuova pagina
   useLayoutEffect(() => { window.scrollTo(0, 0) }, [pathname])
@@ -42,7 +50,9 @@ function Shell() {
   }, [qa])
 
   // Senza View Transitions (o con il tasto indietro) uso un'entrata animata della pagina
-  const fallback = !vt || navType === 'POP'
+  const swiped = swipe?.path === pathname
+  const fallback = !vt || navType === 'POP' || swiped
+  const enterClass = swiped ? (swipe!.dir === 'left' ? 'swipe-in-left' : 'swipe-in-right') : 'page-enter'
 
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[248px_1fr]">
@@ -61,8 +71,8 @@ function Shell() {
         </nav>
       </aside>
 
-      <main className="mx-auto w-full max-w-5xl min-w-0 px-4 pt-safe pb-32 sm:px-8 lg:pb-16">
-        <div key={fallback ? pathname : 'vt'} className={`pt-6 lg:pt-10 ${fallback ? 'page-enter' : ''}`} style={{ viewTransitionName: 'page' }}>
+      <main ref={mainRef} className="mx-auto w-full max-w-5xl min-w-0 px-4 pt-safe pb-32 sm:px-8 lg:pb-16">
+        <div ref={pageRef} key={fallback ? pathname : 'vt'} className={`pt-6 lg:pt-10 ${fallback ? enterClass : ''}`} style={{ viewTransitionName: 'page' }}>
           <Outlet />
         </div>
       </main>
