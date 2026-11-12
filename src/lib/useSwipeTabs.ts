@@ -1,9 +1,10 @@
 import { useEffect, useRef, type RefObject } from 'react'
 import { reducedMotion } from './motion'
+import { isNative } from './native'
 
 export const SWIPE_TABS = ['/', '/movimenti', '/piano', '/impara']
 
-const isStandalone = () =>
+const isStandalone = () => isNative() ||
   matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true
 const isIOS = () => /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
 

@@ -49,6 +49,11 @@ function Splash() {
 }
 
 function Shell({ children }: { children: ReactNode }) {
+  // Sfondo scuro: nell'app iOS la barra di stato passa al testo chiaro
+  useEffect(() => {
+    document.documentElement.dataset.statusbar = 'light'
+    return () => { delete document.documentElement.dataset.statusbar }
+  }, [])
   return (
     <div className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-note px-6 text-note-ink">
       <Guilloche className="pointer-events-none absolute -right-40 -top-40 h-[640px] w-[640px] opacity-40" />

@@ -1,0 +1,37 @@
+/* Integrazione con l'app iOS (Capacitor). Nel browser queste funzioni non fanno nulla. */
+import { Capacitor } from '@capacitor/core'
+
+export const isNative = () => Capacitor.isNativePlatform()
+
+/** Indirizzo pubblico della web app, usato quando l'app nativa deve passare da una pagina web (ritorno dalla banca). */
+export const WEB_URL = (import.meta.env.VITE_WEB_URL as string | undefined) ?? 'https://phoenix0102.github.io/soldi/'
+
+/** Avvio dell'app nativa: barra di stato, splash e link in ingresso (soldi://…). */
+export async function initNative() {
+  if (!isNative()) return
+  document.documentElement.dataset.native = 'ios'
+  const [{ App }, { SplashScreen }, { StatusBar, Style }] = await Promise.all([
+    import('@capacitor/app'), import('@capacitor/splash-screen'), import('@capacitor/status-bar'),
+  ])
+
+  // Testo della barra di stato chiaro su sfondi scuri (tema scuro, schermate di accesso), scuro altrimenti
+  const root = document.documentElement
+  const syncBar = () => {
+    const lightText = root.classList.contains('dark') || root.dataset.statusbar === 'light'
+    StatusBar.setStyle({ style: lightText ? Style.Dark : Style.Light }).catch(() => {})
+  }
+  syncBar()
+  new MutationObserver(syncBar).observe(root, { attributes: true, attributeFilter: ['class', 'data-statusbar'] })
+
+  // soldi://banca?code=…&state=… → ricarica l'app con i parametri, li gestisce useBankReturn
+  App.addListener('appUrlOpen', ({ url }) => {
+    const u = new URL(url)
+    if (u.host === 'banca' || u.pathname.replace(/^\/+/, '') === 'banca') {
+      location.href = `/${u.search}#/impostazioni`
+    } else if (u.hash) {
+      location.hash = u.hash
+    }
+  })
+
+  setTimeout(() => SplashScreen.hide({ fadeOutDuration: 200 }).catch(() => {}), 50)
+}

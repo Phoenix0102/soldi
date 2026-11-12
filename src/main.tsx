@@ -5,9 +5,12 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
 import './index.css'
 import { applyTheme } from './lib/theme'
+import { initNative } from './lib/native'
+import { refreshNativeToken } from './lib/push'
 import App from './App'
 
 applyTheme()
+initNative().then(refreshNativeToken)
 
 export const queryClient = new QueryClient({
   defaultOptions: {
