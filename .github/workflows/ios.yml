@@ -68,6 +68,12 @@ jobs:
           if [ -n "$XC" ]; then sudo xcode-select -s "$XC"; fi
           xcodebuild -version
 
+      - name: Certificato di sviluppo pulito
+        if: steps.secrets.outputs.ok == 'true'
+        env:
+          ASC_KEY_PATH: ${{ runner.temp }}/keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8
+        run: node scripts/asc-reset-dev-cert.mjs
+
       - name: Archivio firmato
         if: steps.secrets.outputs.ok == 'true'
         run: |
