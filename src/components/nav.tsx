@@ -1,36 +1,15 @@
-import { forwardRef, useCallback } from 'react'
-import {
-  Link as RLink, NavLink as RNavLink, useLocation, useNavigate,
-  type LinkProps, type NavLinkProps, type NavigateOptions, type To,
-} from 'react-router-dom'
-import { directionFor, setDirection } from '../lib/motion'
+import { useCallback } from 'react'
+import { Link as RLink, NavLink as RNavLink, useNavigate, type NavigateOptions, type To } from 'react-router-dom'
 
-const toPath = (to: To) => (typeof to === 'string' ? to : to.pathname ?? '/')
+/* Link e NavLink restano quelli di React Router: le animazioni le gestisce il Layout. */
+export const Link = RLink
+export const NavLink = RNavLink
 
-/** Link con transizione animata e direzione calcolata. */
-export const Link = forwardRef<HTMLAnchorElement, LinkProps>(function Link({ to, onClick, ...rest }, ref) {
-  const { pathname } = useLocation()
-  return (
-    <RLink ref={ref} to={to} viewTransition
-      onClick={(e) => { setDirection(directionFor(pathname, toPath(to))); onClick?.(e) }} {...rest} />
-  )
-})
-
-export const NavLink = forwardRef<HTMLAnchorElement, NavLinkProps>(function NavLink({ to, onClick, ...rest }, ref) {
-  const { pathname } = useLocation()
-  return (
-    <RNavLink ref={ref} to={to} viewTransition
-      onClick={(e) => { setDirection(directionFor(pathname, toPath(to))); onClick?.(e) }} {...rest} />
-  )
-})
-
-/** navigate() con transizione animata. */
+/** navigate() con numero (indietro) o destinazione. */
 export function useGo() {
   const navigate = useNavigate()
-  const { pathname } = useLocation()
   return useCallback((to: To | number, opts?: NavigateOptions) => {
-    if (typeof to === 'number') { setDirection('back'); navigate(to); return }
-    setDirection(directionFor(pathname, toPath(to)))
-    navigate(to, { viewTransition: true, ...opts })
-  }, [navigate, pathname])
+    if (typeof to === 'number') navigate(to)
+    else navigate(to, opts)
+  }, [navigate])
 }

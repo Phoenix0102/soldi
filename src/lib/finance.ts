@@ -85,6 +85,83 @@ export function networthHistory(accounts: Account[], txs: Transaction[], snaps: 
   return out
 }
 
+export type Period = '3m' | '6m' | '1y' | 'all'
+
+/** Serie del patrimonio per il grafico: settimanale sui periodi brevi, mensile su quelli lunghi. */
+export function networthSeries(accounts: Account[], txs: Transaction[], snaps: Snapshot[], period: Period) {
+  const active = accounts.filter((a) => !a.archived && a.include_in_networth)
+  const today = new Date()
+  const first = txs.length ? parseISO(txs[txs.length - 1].date) : subMonths(today, 12)
+  const months = period === '3m' ? 3 : period === '6m' ? 6 : period === '1y' ? 12 : Math.max(3, differenceInCalendarMonths(today, first) + 1)
+  const start = subMonths(today, months)
+  const weekly = period === '3m'
+  const days: Date[] = []
+  if (weekly) {
+    for (let d = start; d < today; d = addWeeks(d, 1)) days.push(d)
+  } else {
+    for (let i = months - 1; i >= 1; i--) days.push(endOfMonth(subMonths(today, i)))
+  }
+  days.push(today)
+  return days.map((d) => {
+    const day = format(d, 'yyyy-MM-dd')
+    return { date: d, value: round2(active.reduce((s, a) => s + balanceAt(a, day, txs, snaps), 0)) }
+  })
+}
+
+/**
+ * Tutta la storia del patrimonio (almeno 12 mesi), a settimane o a fine mese: il grafico
+ * ne mostra una finestra e col dito si torna indietro nel tempo.
+ */
+export function networthFull(accounts: Account[], txs: Transaction[], snaps: Snapshot[], weekly: boolean) {
+  const active = accounts.filter((a) => !a.archived && a.include_in_networth)
+  const today = new Date()
+  const firstTx = txs.length ? parseISO(txs[txs.length - 1].date) : today
+  const firstSnap = snaps.length ? parseISO(snaps.reduce((m, s) => (s.date < m ? s.date : m), snaps[0].date)) : today
+  const first = firstTx < firstSnap ? firstTx : firstSnap
+  const months = Math.min(120, Math.max(12, differenceInCalendarMonths(today, first) + 1))
+  const days: Date[] = []
+  if (weekly) {
+    const start = subMonths(today, months)
+    for (let d = start; d < today; d = addWeeks(d, 1)) days.push(d)
+  } else {
+    for (let i = months - 1; i >= 1; i--) days.push(endOfMonth(subMonths(today, i)))
+  }
+  days.push(today)
+  return days.map((d) => {
+    const day = format(d, 'yyyy-MM-dd')
+    return { date: d, value: round2(active.reduce((s, a) => s + balanceAt(a, day, txs, snaps), 0)) }
+  })
+}
+
+/** Variazione del patrimonio mese per mese (fine mese su fine mese precedente). */
+export function monthlyChanges(accounts: Account[], txs: Transaction[], snaps: Snapshot[], months = 6) {
+  const h = networthHistory(accounts, txs, snaps, months + 1)
+  return h.slice(1).map((p, i) => ({ month: p.month, change: round2(p.value - h[i].value) }))
+}
+
+/**
+ * Previsione di fine mese per la liquidità: saldo di oggi, meno le spese ricorrenti ancora attese,
+ * più le entrate ricorrenti, meno la spesa variabile media per i giorni che mancano.
+ */
+export function monthEndForecast(liquidNow: number, txs: Transaction[], recurring: Recurring[]) {
+  const today = new Date()
+  const end = endOfMonth(today)
+  const daysLeft = Math.max(0, Math.round((+end - +today) / 86400000))
+  const endIso = format(end, 'yyyy-MM-dd'), todayIso = format(today, 'yyyy-MM-dd')
+  let fixed = 0
+  for (const r of recurring) {
+    if (!r.active || r.next_date <= todayIso || r.next_date > endIso) continue
+    fixed += r.kind === 'income' ? r.amount : -r.amount
+  }
+  // Spesa variabile giornaliera: media degli ultimi 3 mesi, esclusi gli addebiti ricorrenti già noti
+  const known = recurring.map((r) => (r.match_text || r.name).toLowerCase())
+  const since = format(subMonths(today, 3), 'yyyy-MM-dd')
+  const variable = txs.filter((t) => t.kind === 'expense' && t.date >= since && t.date < todayIso && !known.some((k) => k && t.description.toLowerCase().includes(k)))
+  const daily = variable.reduce((s, t) => s - t.amount, 0) / 90
+  const value = round2(liquidNow + fixed - daily * daysLeft)
+  return { value, daysLeft, fixed: round2(fixed), variable: round2(daily * daysLeft) }
+}
+
 /* ---------- Ricorrenti ---------- */
 
 export function advance(dateIso: string, f: Frequency) {
@@ -146,9 +223,15 @@ export function applyRules(description: string, rules: Rule[], categories: Categ
   for (const r of sorted) {
     if (!r.pattern) continue
     if (up.includes(r.pattern.toUpperCase())) {
+      const action = r.action ?? 'category'
+      if (action === 'transfer') return { action, category_id: null, target_account_id: null, rename_to: r.rename_to }
+      if (action === 'debt') {
+        if (amount >= 0 || !r.target_account_id) continue
+        return { action, category_id: null, target_account_id: r.target_account_id, rename_to: r.rename_to }
+      }
       const cat = categories.find((c) => c.id === r.category_id)
       if (cat && cat.kind !== wantKind) continue
-      return { category_id: r.category_id, rename_to: r.rename_to }
+      return { action, category_id: r.category_id, target_account_id: null, rename_to: r.rename_to }
     }
   }
   return null
@@ -179,6 +262,11 @@ export function compound(monthly: number, years: number, annualRate: number, ini
     if (i % 12 === 0) series.push({ year: i / 12, value: round2(v), invested: round2(initial + monthly * i) })
   }
   return series
+}
+
+/** Chiave di raggruppamento per lo smistamento: esercente ripulito, o la descrizione se non resta nulla. */
+export function merchantKey(description: string) {
+  return ruleKeyFor(description) || normalizeDesc(description).toUpperCase() || description.trim().toUpperCase() || '(SENZA DESCRIZIONE)'
 }
 
 /** Parola chiave per una regola: il nome dell'esercente ripulito (1 o 2 parole). */

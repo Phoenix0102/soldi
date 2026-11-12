@@ -1,16 +1,16 @@
 import { useEffect, type ComponentType } from 'react'
 import { createHashRouter, RouterProvider, Navigate, type RouteObject } from 'react-router-dom'
 import { Gate } from './auth/Gate'
-import { Layout } from './components/Layout'
+import { setNavigator } from './lib/navigate'
+import { Layout, TabRoute } from './components/Layout'
 import { ToastProvider } from './components/ui'
-import Dashboard from './pages/Dashboard'
 
 // Le pagine si caricano prima della transizione, così l'animazione non mostra mai uno spinner
 const page = (load: () => Promise<{ default: ComponentType }>) => async () => ({ Component: (await load()).default })
 
 const loaders = {
   movimenti: () => import('./pages/Transactions'),
-  conti: () => import('./pages/Accounts'),
+  patrimonio: () => import('./pages/Networth'),
   conto: () => import('./pages/AccountDetail'),
   piano: () => import('./pages/Plan'),
   impara: () => import('./pages/Learn'),
@@ -20,28 +20,39 @@ const loaders = {
   smista: () => import('./pages/Triage'),
   resoconto: () => import('./pages/Report'),
   benvenuto: () => import('./pages/Welcome'),
+  abbonamenti: () => import('./pages/Subscriptions'),
+  statistiche: () => import('./pages/Stats'),
+  consulente: () => import('./pages/Advisor'),
+  anno: () => import('./pages/YearReview'),
 }
 
 const routes: RouteObject[] = [{
   element: <Layout />,
   children: [
-    { index: true, element: <Dashboard /> },
-    { path: 'movimenti', lazy: page(loaders.movimenti) },
-    { path: 'conti', lazy: page(loaders.conti) },
+    { index: true, element: <TabRoute index={0} /> },
+    { path: 'movimenti', element: <TabRoute index={1} /> },
+    { path: 'patrimonio', element: <TabRoute index={2} /> },
+    { path: 'piano', element: <TabRoute index={3} /> },
+    { path: 'conti', element: <Navigate to="/patrimonio" replace /> },
     { path: 'conti/:id', lazy: page(loaders.conto) },
-    { path: 'piano', lazy: page(loaders.piano) },
     { path: 'impara', lazy: page(loaders.impara) },
     { path: 'impara/:lessonId', lazy: page(loaders.lezione) },
     { path: 'importa', lazy: page(loaders.importa) },
     { path: 'impostazioni', lazy: page(loaders.impostazioni) },
+    { path: 'impostazioni/:section', lazy: page(loaders.impostazioni) },
     { path: 'smista', lazy: page(loaders.smista) },
     { path: 'resoconto', lazy: page(loaders.resoconto) },
     { path: 'benvenuto', lazy: page(loaders.benvenuto) },
+    { path: 'abbonamenti', lazy: page(loaders.abbonamenti) },
+    { path: 'statistiche', lazy: page(loaders.statistiche) },
+    { path: 'consulente', lazy: page(loaders.consulente) },
+    { path: 'anno', lazy: page(loaders.anno) },
     { path: '*', element: <Navigate to="/" replace /> },
   ],
 }]
 
 const router = createHashRouter(routes)
+setNavigator((to) => { router.navigate(to) })
 
 /** Precarica tutte le sezioni quando il browser è libero. */
 function Prefetch() {

@@ -1,7 +1,8 @@
+import { BackButton } from '../components/back'
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import { useParams } from 'react-router-dom'
 import { Link, useGo } from '../components/nav'
-import { ArrowLeft, BookOpen, Check, X, Lightbulb } from 'lucide-react'
+import { BookOpen, Check, X, Lightbulb } from 'lucide-react'
 import { LESSONS, MODULES, lessonById, type Block } from '../learn/content'
 import { Apply } from '../learn/Apply'
 import { useLearnProgress, useInvalidate } from '../lib/data'
@@ -45,7 +46,7 @@ export default function Lesson() {
 
   return (
     <article className="mx-auto max-w-[42rem]">
-      <Link to="/impara" className="mb-6 inline-flex items-center gap-1.5 text-sm font-medium text-muted hover:text-ink"><ArrowLeft size={16} /> Percorso</Link>
+      <BackButton label="Impara" fallback="/impara" always />
       <p className="text-sm text-muted">{mod?.title}, {lesson.minutes} minuti di lettura</p>
       <h1 className="mt-1 text-[2rem] font-semibold leading-[1.15] tracking-[-0.025em] sm:text-[2.4rem]">{lesson.title}</h1>
       <p className="mt-3 text-lg text-muted">{lesson.summary}</p>

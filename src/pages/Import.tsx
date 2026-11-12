@@ -5,14 +5,18 @@ import { applyRules, ruleKeyFor, suggestFromHistory } from '../lib/finance'
 import { detect, extract, hashRow, readFile, type FullMapping, type Grid } from '../lib/importer'
 import { supabase } from '../lib/supabase'
 import { money, shortDate } from '../lib/format'
-import type { TxKind } from '../lib/types'
+import type { Transaction, TxKind } from '../lib/types'
+import { aiConfigured, autoCategorize } from '../lib/ai'
 import { AccountChips } from '../components/QuickAdd'
 import { Link } from '../components/nav'
 import { Label, PageHeader, useToast } from '../components/ui'
+import { BackButton } from '../components/back'
 
 interface Row {
   key: string; date: string; amount: number; description: string; balance: number | null
   category_id: string | null; kind: TxKind; include: boolean; dup: 'exact' | 'maybe' | null; hash: string; touched?: boolean
+  /** Conto debito da ridurre (regola "rata") */
+  debt?: string | null
 }
 
 const TRANSFER_HINT = /(giroconto|ricarica|top.?up|trasferimento tra|bonifico a (me|mio)|own account|to pocket|da pocket|exchange|cambio valuta)/i
@@ -36,7 +40,8 @@ export default function Import() {
   const [rows, setRows] = useState<Row[]>([])
   const [skipped, setSkipped] = useState(0)
   const [busy, setBusy] = useState(false)
-  const [done, setDone] = useState<{ n: number; snapshot: boolean; learned: number; toSort: number } | null>(null)
+  const [done, setDone] = useState<{ n: number; snapshot: boolean; learned: number; toSort: number; ai?: number } | null>(null)
+  const [aiBusy, setAiBusy] = useState(false)
   const [rememberChoices, setRememberChoices] = useState(true)
 
   const account = accounts.find((a) => a.id === accountId)
@@ -58,8 +63,8 @@ export default function Import() {
       seen.set(k, n + 1)
       const hash = await hashRow(accountId, r, n)
       const lower = r.description.toLowerCase()
-      const isTransfer = TRANSFER_HINT.test(r.description) || otherInstitutions.some((i) => lower.includes(i))
       const ruled = applyRules(r.description, rules, categories, r.amount)
+      const isTransfer = ruled?.action === 'transfer' || ruled?.action === 'debt' || (!ruled && (TRANSFER_HINT.test(r.description) || otherInstitutions.some((i) => lower.includes(i))))
       const category_id = isTransfer ? null : ruled?.category_id ?? suggestFromHistory(r.description, txs)
       const exact = existing.has(hash)
       const maybe = !exact && manual.some((t) => Math.abs(t.amount - r.amount) < 0.01 && Math.abs(+new Date(t.date) - +new Date(r.date)) <= 3 * 86400000)
@@ -67,6 +72,7 @@ export default function Import() {
         key: hash, hash, date: r.date, amount: r.amount, description: ruled?.rename_to || r.description || '(senza descrizione)', balance: r.balance,
         category_id, kind: isTransfer ? 'transfer' : r.amount > 0 ? 'income' : 'expense',
         include: !exact && !maybe, dup: exact ? 'exact' : maybe ? 'maybe' : null,
+        debt: ruled?.action === 'debt' ? ruled.target_account_id : null,
       })
     }
     setRows(out.sort((a, b) => b.date.localeCompare(a.date)))
@@ -102,9 +108,18 @@ export default function Import() {
       const payload = sel.map((r) => ({
         account_id: accountId, date: r.date, amount: r.amount, description: r.description,
         category_id: r.kind === 'transfer' ? null : r.category_id, kind: r.kind, source: 'csv', import_hash: r.hash,
+        transfer_group: r.debt && r.kind === 'transfer' ? crypto.randomUUID() : null,
       }))
       for (let i = 0; i < payload.length; i += 500) {
         const { error } = await supabase.from('transactions').upsert(payload.slice(i, i + 500), { onConflict: 'user_id,import_hash', ignoreDuplicates: true })
+        if (error) throw error
+      }
+      // Rate: la contropartita sul conto del debito
+      const counters = sel.flatMap((r, i) => r.debt && payload[i].transfer_group ? [{
+        account_id: r.debt, date: r.date, amount: -r.amount, description: r.description, kind: 'transfer', transfer_group: payload[i].transfer_group, source: 'csv',
+      }] : [])
+      if (counters.length) {
+        const { error } = await supabase.from('transactions').insert(counters)
         if (error) throw error
       }
       await supabase.from('import_profiles').upsert({ account_id: accountId, name: account?.name ?? 'Profilo', mapping: map }, { onConflict: 'user_id,account_id' })
@@ -134,8 +149,24 @@ export default function Import() {
         })
         if (newRules.length) { await supabase.from('rules').insert(newRules); learned = newRules.length }
       }
+      // Quello che le regole non riconoscono lo propone l'AI (se attiva)
+      let ai = 0
+      const pending = sel.filter((r) => !r.category_id && r.kind !== 'transfer')
+      if (pending.length && await aiConfigured()) {
+        setAiBusy(true)
+        try {
+          const hashes = pending.map((r) => r.hash)
+          const fresh: Transaction[] = []
+          for (let i = 0; i < hashes.length; i += 200) {
+            const { data } = await supabase.from('transactions').select('*').in('import_hash', hashes.slice(i, i + 200))
+            fresh.push(...((data ?? []) as Transaction[]))
+          }
+          ai = await autoCategorize(fresh, categories)
+        } catch { /* l'import è comunque riuscito */ }
+        finally { setAiBusy(false) }
+      }
       invalidate('transactions', 'import_profiles', 'balance_snapshots', 'rules')
-      setDone({ n: sel.length, snapshot, learned, toSort: sel.filter((r) => !r.category_id && r.kind !== 'transfer').length })
+      setDone({ n: sel.length, snapshot, learned, ai, toSort: Math.max(0, pending.length - ai) })
       setRows([]); setGrid(null)
     } catch (e) {
       toast(`Importazione non riuscita: ${(e as Error).message}`, { tone: 'err' })
@@ -147,6 +178,7 @@ export default function Import() {
 
   return (
     <div>
+      <BackButton label="Movimenti" fallback="/movimenti" />
       <PageHeader title="Importa estratto conto" subtitle="CSV o Excel scaricato dall'home banking. I doppioni vengono riconosciuti e scartati." />
 
       {done && (
@@ -155,6 +187,7 @@ export default function Import() {
           <div>
             <p className="font-semibold">{done.n} movimenti importati su {account?.name}</p>
             <p className="text-sm text-muted">{done.snapshot ? 'Ho anche aggiornato il saldo usando quello riportato nel file.' : 'Controlla che il saldo del conto corrisponda a quello della banca; se no, correggilo dalla pagina del conto.'}</p>
+            {!!done.ai && <p className="mt-1 text-sm text-muted">L'AI ha categorizzato altri {done.ai} movimenti e ha salvato le regole: se qualcosa non ti torna, correggilo e l'app impara.</p>}
             {done.learned > 0 && <p className="mt-1 text-sm text-muted">Ho imparato {done.learned} {done.learned === 1 ? 'nuovo esercente' : 'nuovi esercenti'} dalle tue scelte.</p>}
             {done.toSort > 0 && <Link to="/smista" className="btn btn-primary mt-3">Smista i {done.toSort} senza categoria</Link>}
           </div>
@@ -234,7 +267,7 @@ export default function Import() {
                 Ricorda le categorie che scelgo
               </label>
               <button onClick={() => { setRows([]); setGrid(null); setFileName('') }} className="btn btn-ghost"><ArrowLeft size={16} /> Annulla</button>
-              <button onClick={doImport} disabled={!sel.length || busy} className="btn btn-primary">{busy ? 'Importo…' : `Importa ${sel.length} movimenti`}</button>
+              <button onClick={doImport} disabled={!sel.length || busy} className="btn btn-primary">{aiBusy ? 'Categorizzo con l\'AI…' : busy ? 'Importo…' : `Importa ${sel.length} movimenti`}</button>
             </div>
           </div>
           <div className="overflow-hidden rounded-3xl bg-surface">

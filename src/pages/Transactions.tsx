@@ -89,7 +89,7 @@ export default function Transactions() {
         ) : groups.map(([date, list], gi) => {
           const day = list.reduce((s, t) => s + (t.kind === 'transfer' ? 0 : t.amount), 0)
           return (
-            <section key={date} className="rise mb-4" style={{ '--i': gi } as React.CSSProperties}>
+            <section key={date} className={`day-group mb-4 ${gi < 8 ? 'rise' : ''}`} style={{ '--i': gi } as React.CSSProperties}>
               <div className="flex items-baseline justify-between px-2 py-1.5 text-sm">
                 <h3 className="font-medium text-muted capitalize">{dayLabel(date)}</h3>
                 <span className="num text-faint">{day > 0 ? '+' : ''}{money(day)}</span>

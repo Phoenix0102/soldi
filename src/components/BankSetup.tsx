@@ -177,7 +177,7 @@ function PickBank({ onClose }: { onClose: () => void }) {
   }
   return (
     <Sheet open onClose={onClose} title="Scegli la banca">
-      <input className="field" autoFocus placeholder="Cerca, per esempio ING" value={q} onChange={(e) => setQ(e.target.value)} />
+      <input className="field" placeholder="Cerca, per esempio ING" value={q} onChange={(e) => setQ(e.target.value)} />
       <div className="mt-3 max-h-[55dvh] overflow-y-auto">
         {list.isLoading ? <p className="py-6 text-center text-sm text-muted">Carico le banche…</p> : list.isError ? <p className="py-6 text-center text-sm text-neg">{(list.error as Error).message}</p> : (
           <ul className="divide-y divide-line">

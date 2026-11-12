@@ -7,6 +7,10 @@ import { monthKey } from '../lib/finance'
 import { money, monthLabel, percent, shortDate } from '../lib/format'
 import { Badge } from '../components/Icon'
 import { Bar, CountMoney, Empty, SkeletonPage } from '../components/ui'
+import { CashflowBars } from '../components/Charts'
+import { BackButton } from '../components/back'
+import { cashflow as flowOf, inMonth } from '../lib/finance'
+import { startOfMonth } from 'date-fns'
 
 export default function Report() {
   const { data: txs, isLoading } = useTransactions()
@@ -20,6 +24,11 @@ export default function Report() {
   const [month, setMonth] = useState(() => (new Date().getDate() <= 5 ? subMonths(new Date(), 1) : new Date()))
 
   const r = useMemo(() => monthReport(month, txs ?? [], accounts, snaps, budgets, recurring), [month, txs, accounts, snaps, budgets, recurring])
+  const six = useMemo(() => Array.from({ length: 6 }, (_, i) => {
+    const m = startOfMonth(subMonths(month, 5 - i))
+    const c = flowOf(inMonth(txs ?? [], m))
+    return { month: m, income: c.income, expense: c.expense }
+  }), [txs, month])
   if (isLoading) return <SkeletonPage />
 
   const partial = isSameMonth(month, new Date())
@@ -32,6 +41,7 @@ export default function Report() {
 
   return (
     <div className="report">
+      <div className="no-print"><BackButton label="Home" /></div>
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-muted">Resoconto{partial ? ' (mese in corso)' : ''}</p>
@@ -70,6 +80,11 @@ export default function Report() {
               ))}
             </section>
           )}
+
+          <section className="mt-8">
+            <h2 className="mb-3 text-lg font-semibold">Gli ultimi 6 mesi</h2>
+            <div className="rounded-3xl bg-surface p-5"><CashflowBars data={six} /></div>
+          </section>
 
           <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
             <section>

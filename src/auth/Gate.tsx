@@ -2,9 +2,11 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { useQueryClient } from '@tanstack/react-query'
 import { Delete, Eye, EyeOff, ScanFace } from 'lucide-react'
-import { bioEnabled, verifyBio } from '../lib/biometric'
+import { bioAvailable, bioEnabled, enableBio, verifyBioOnce } from '../lib/biometric'
+import { isNative } from '../lib/native'
+import { haptic } from '../lib/motion'
 import { supabase, OWNER_EMAIL } from '../lib/supabase'
-import { checkPin, hasPin, lockMinutes, pinSkipped, setPin, skipPin } from './pin'
+import { checkPin, hasPin, lockMinutes, PIN_LEN, pinLength, pinSkipped, setPin, skipPin } from './pin'
 import { Guilloche } from '../components/Guilloche'
 
 export function Gate({ children }: { children: ReactNode }) {
@@ -39,9 +41,18 @@ export function Gate({ children }: { children: ReactNode }) {
 
   if (session === undefined) return <Splash />
   if (!session) return <Login onDone={() => { setLocked(false); if (!hasPin() && !pinSkipped()) setNeedsPinSetup(true) }} />
-  if (needsPinSetup) return <PinSetup onDone={() => setNeedsPinSetup(false)} />
-  if (locked && hasPin()) return <PinLock onUnlock={() => { last.current = Date.now(); setLocked(false) }} />
-  return <>{children}</>
+  if (needsPinSetup) return <PinSetup upgrade={hasPin()} onDone={() => setNeedsPinSetup(false)} />
+  // Il blocco si sovrappone all'app senza smontarla: sbloccando ritrovi tutto dov'era
+  return (
+    <>
+      <div aria-hidden={locked && hasPin()} className={locked && hasPin() ? 'pointer-events-none' : ''}>{children}</div>
+      {locked && hasPin() && <div className="fixed inset-0 z-[80]"><PinLock onUnlock={() => {
+        last.current = Date.now(); setLocked(false)
+        // PIN di 5 cifre della versione precedente: chiedo quello nuovo da 4
+        if (pinLength() !== PIN_LEN) setNeedsPinSetup(true)
+      }} /></div>}
+    </>
+  )
 }
 
 function Splash() {
@@ -49,6 +60,11 @@ function Splash() {
 }
 
 function Shell({ children }: { children: ReactNode }) {
+  // Sfondo scuro: nell'app iOS la barra di stato passa al testo chiaro
+  useEffect(() => {
+    document.documentElement.dataset.statusbar = 'light'
+    return () => { delete document.documentElement.dataset.statusbar }
+  }, [])
   return (
     <div className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-note px-6 text-note-ink">
       <Guilloche className="pointer-events-none absolute -right-40 -top-40 h-[640px] w-[640px] opacity-40" />
@@ -96,11 +112,12 @@ function Login({ onDone }: { onDone: () => void }) {
   )
 }
 
-function PinPad({ title, subtitle, onComplete, error, extra }: { title: string; subtitle?: string; onComplete: (pin: string) => void; error?: string; extra?: ReactNode }) {
+function PinPad({ title, subtitle, onComplete, error, extra, length = PIN_LEN }: { title: string; subtitle?: string; onComplete: (pin: string) => void; error?: string; extra?: ReactNode; length?: number }) {
   const [pin, setPinVal] = useState('')
-  const LEN = 5
+  const LEN = length
   const press = (d: string) => {
     if (pin.length >= LEN) return
+    haptic('tick')
     const next = pin + d
     setPinVal(next)
     if (next.length === LEN) setTimeout(() => { onComplete(next); setPinVal('') }, 120)
@@ -118,18 +135,18 @@ function PinPad({ title, subtitle, onComplete, error, extra }: { title: string; 
       <div className="text-center">
         <h1 className="text-2xl font-semibold">{title}</h1>
         {subtitle && <p className="mt-1 opacity-75">{subtitle}</p>}
-        <div className={`mt-8 flex justify-center gap-4 ${error ? 'animate-[shake_.3s]' : ''}`} aria-label={`${pin.length} cifre inserite`}>
+        <div key={error} className={`mt-8 flex justify-center gap-5 ${error ? 'animate-[shake_.35s]' : ''}`} aria-label={`${pin.length} cifre inserite`}>
           {Array.from({ length: LEN }).map((_, i) => (
-            <span key={i} className={`h-3.5 w-3.5 rounded-full border border-note-ink/60 transition ${i < pin.length ? 'bg-note-ink' : ''}`} />
+            <span key={i} className={`pin-dot ${i < pin.length ? 'is-on' : ''}`} />
           ))}
         </div>
         <p className="mt-4 h-5 text-sm text-[#ffb4ab]">{error}</p>
         <div className="mx-auto mt-4 grid max-w-[260px] grid-cols-3 gap-4">
           {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((d) => (
-            <button key={d} onClick={() => press(d)} className="num aspect-square rounded-full bg-white/8 text-2xl font-medium hover:bg-white/15 active:bg-white/25">{d}</button>
+            <button key={d} onClick={() => press(d)} className="pin-key num">{d}</button>
           ))}
           {extra ?? <span />}
-          <button onClick={() => press('0')} className="num aspect-square rounded-full bg-white/8 text-2xl font-medium hover:bg-white/15 active:bg-white/25">0</button>
+          <button onClick={() => press('0')} className="pin-key num">0</button>
           <button onClick={() => setPinVal((p) => p.slice(0, -1))} className="flex aspect-square items-center justify-center rounded-full opacity-80 hover:bg-white/10" aria-label="Cancella"><Delete /></button>
         </div>
       </div>
@@ -140,17 +157,41 @@ function PinPad({ title, subtitle, onComplete, error, extra }: { title: string; 
 function PinLock({ onUnlock }: { onUnlock: () => void }) {
   const [err, setErr] = useState('')
   const [tries, setTries] = useState(0)
-  const bio = bioEnabled()
-  const tried = useRef(false)
-  const tryBio = async () => { if (await verifyBio()) onUnlock() }
-  // Face ID parte da solo all'apertura; se il telefono lo blocca resta il pulsante
-  useEffect(() => { if (bio && !tried.current) { tried.current = true; tryBio() } }) // eslint-disable-line react-hooks/exhaustive-deps
+  const [bio, setBio] = useState(false)
+  const done = useRef(false)
+  const tryBio = async () => {
+    if (done.current) return
+    // iOS annulla Face ID se lo chiedo mentre l'app sta ancora tornando in primo piano
+    if (document.visibilityState !== 'visible') return
+    await new Promise((r) => setTimeout(r, 380))
+    // Se iOS rifiuta subito la richiesta (app non ancora attiva) riprovo: un annullamento
+    // dell'utente richiede più tempo e non viene ripetuto
+    for (let i = 0; i < 3 && !done.current; i++) {
+      const t0 = Date.now()
+      if (await verifyBioOnce()) { done.current = true; haptic('success'); onUnlock(); return }
+      if (Date.now() - t0 > 900 || document.visibilityState !== 'visible') return
+      await new Promise((r) => setTimeout(r, 450))
+    }
+  }
+  useEffect(() => {
+    if (!bioEnabled()) return
+    let off: (() => void) | undefined
+    bioAvailable().then((ok) => {
+      setBio(ok)
+      if (!ok) return
+      tryBio()
+      // A ogni ritorno nell'app (con il blocco ancora attivo) riprova da solo
+      if (isNative()) import('@capacitor/app').then(({ App }) => App.addListener('appStateChange', ({ isActive }) => { if (isActive) tryBio() })).then((h) => { off = () => h.remove() })
+    })
+    return () => off?.()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <PinPad title="Inserisci il PIN" error={err}
-      extra={bio ? <button onClick={tryBio} className="flex aspect-square items-center justify-center rounded-full opacity-90 hover:bg-white/10" aria-label="Sblocca con Face ID o impronta"><ScanFace size={28} /></button> : undefined}
+    <PinPad title="Bentornato" subtitle={bio ? 'Usa Face ID o inserisci il PIN' : 'Inserisci il PIN'} error={err} length={pinLength()}
+      extra={bio ? <button onClick={tryBio} className="pin-key !bg-transparent" aria-label="Sblocca con Face ID"><ScanFace size={30} /></button> : undefined}
       onComplete={async (p) => {
-      if (await checkPin(p)) onUnlock()
+      if (await checkPin(p)) { done.current = true; haptic('success'); onUnlock() }
       else {
+        haptic('warning')
         const t = tries + 1
         setTries(t)
         if (t >= 8) { await supabase.auth.signOut(); localStorage.removeItem('soldi-pin'); location.reload() }
@@ -160,24 +201,31 @@ function PinLock({ onUnlock }: { onUnlock: () => void }) {
   )
 }
 
-export function PinSetup({ onDone }: { onDone: () => void }) {
+export function PinSetup({ onDone, upgrade, onCancel }: { onDone: () => void; upgrade?: boolean; onCancel?: () => void }) {
   const [first, setFirst] = useState<string | null>(null)
   const [err, setErr] = useState('')
   return (
     <div className="relative">
       <PinPad
-        title={first ? 'Conferma il PIN' : 'Scegli un PIN'}
-        subtitle={first ? 'Riscrivilo per sicurezza.' : '5 cifre per aprire l\'app su questo dispositivo.'}
+        title={first ? 'Conferma il PIN' : upgrade ? 'Nuovo PIN a 4 cifre' : 'Scegli un PIN'}
+        subtitle={first ? 'Riscrivilo per sicurezza.' : upgrade ? 'Il PIN ora è più corto: scegline uno nuovo.' : '4 cifre per aprire l\'app su questo dispositivo.'}
         error={err}
         onComplete={async (p) => {
           if (!first) { setFirst(p); setErr(''); return }
-          if (p !== first) { setFirst(null); setErr('I due PIN non coincidono. Ricomincia.'); return }
-          await setPin(p); onDone()
+          if (p !== first) { haptic('warning'); setFirst(null); setErr('I due PIN non coincidono. Ricomincia.'); return }
+          try { await setPin(p) } catch (e) {
+            haptic('warning'); setFirst(null); setErr(`PIN non salvato (${(e as Error).message}). Riprova.`); return
+          }
+          haptic('success')
+          setFirst(null)
+          onDone()
+          // Subito dopo propongo Face ID (iOS chiede il permesso la prima volta), senza bloccare niente
+          if (isNative() && bioEnabled()) setTimeout(() => { bioAvailable().then((ok) => { if (ok) return enableBio() }).catch(() => {}) }, 500)
         }}
       />
-      <button onClick={() => { skipPin(); onDone() }} className="fixed bottom-8 left-1/2 -translate-x-1/2 text-sm text-note-ink/70 underline underline-offset-4">
-        Non ora
-      </button>
+      {!upgrade && <button onClick={() => { if (onCancel) onCancel(); else { skipPin(); onDone() } }} className="fixed bottom-[calc(2rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 text-sm text-note-ink/70 underline underline-offset-4">
+        {onCancel ? 'Annulla' : 'Non ora'}
+      </button>}
     </div>
   )
 }

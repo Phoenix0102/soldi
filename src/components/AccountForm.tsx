@@ -43,7 +43,7 @@ export function AccountForm({ open, onClose, account }: { open: boolean; onClose
   return (
     <Sheet open={open} onClose={onClose} title={account ? 'Modifica conto' : 'Nuovo conto'}>
       <div className="space-y-4">
-        <label className="block"><Label>Nome</Label><input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Es. Conto Revolut" autoFocus /></label>
+        <label className="block"><Label>Nome</Label><input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Es. Conto Revolut" /></label>
         <label className="block">
           <Label>Tipo</Label>
           <select className="field" value={type} onChange={(e) => setType(e.target.value as AccountType)}>

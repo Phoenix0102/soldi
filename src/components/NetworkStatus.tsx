@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { WifiOff } from 'lucide-react'
 import { useToast } from './ui'
+import { flush, pendingCount } from '../lib/outbox'
 
 /** Avvisa quando manca la connessione o un caricamento fallisce, e riprova al ritorno online. */
 export function NetworkStatus() {
@@ -11,7 +12,13 @@ export function NetworkStatus() {
   const lastErr = useRef(0)
 
   useEffect(() => {
-    const on = () => { setOnline(true); qc.invalidateQueries() }
+    const send = async () => {
+      if (!pendingCount()) return
+      const n = await flush()
+      if (n) { toast(n === 1 ? 'Inviato il movimento salvato offline' : `Inviati ${n} movimenti salvati offline`); qc.invalidateQueries() }
+    }
+    send()
+    const on = () => { setOnline(true); send().then(() => qc.invalidateQueries()) }
     const off = () => setOnline(false)
     window.addEventListener('online', on)
     window.addEventListener('offline', off)

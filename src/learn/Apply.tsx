@@ -96,7 +96,7 @@ function Savings() {
       <p>In media risparmi il <strong className="num">{percent(rate)}</strong> di quello che entra.</p>
       <div className="mt-3"><Bar value={Math.max(0, rate)} max={0.3} tone={rate >= 0.2 ? 'gold' : 'brand'} /></div>
       <p className="mt-3 text-sm text-muted">Per arrivare al 10% servono <strong className="num">{money(target10, true)}</strong> al mese, per il 20% <strong className="num">{money(target20, true)}</strong>. Sono le cifre da mettere nel bonifico automatico.</p>
-      <Link to="/piano?tab=recurring" className="btn btn-primary mt-4">Imposta il risparmio automatico</Link>
+      <Link to="/abbonamenti" className="btn btn-primary mt-4">Imposta il risparmio automatico</Link>
     </div>
   )
 }
@@ -162,7 +162,7 @@ function Subscriptions() {
   const { data: rec = [] } = useRecurring()
   const subs = rec.filter((r) => r.active && r.kind === 'expense')
   if (!subs.length) return (
-    <div><p className="text-sm text-muted">Non hai ancora aggiunto spese ricorrenti.</p><Link to="/piano?tab=recurring" className="btn btn-primary mt-3">Aggiungile ora</Link></div>
+    <div><p className="text-sm text-muted">Non hai ancora aggiunto spese ricorrenti.</p><Link to="/abbonamenti" className="btn btn-primary mt-3">Aggiungile ora</Link></div>
   )
   const monthly = subs.reduce((s, r) => s + monthlyEquivalent(r), 0)
   return (

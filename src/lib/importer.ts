@@ -1,3 +1,4 @@
+import { sha256 } from './sha256'
 import Papa from 'papaparse'
 import { parseAmount } from './format'
 import type { ImportMapping } from './types'
@@ -158,6 +159,6 @@ export function cleanDescription(s: string) {
 
 export async function hashRow(accountId: string, r: { date: string; amount: number; description: string }, n: number) {
   const s = `${accountId}|${r.date}|${r.amount.toFixed(2)}|${r.description.toLowerCase()}|${n}`
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s))
-  return Array.from(new Uint8Array(buf)).slice(0, 16).map((b) => b.toString(16).padStart(2, '0')).join('')
+  // Primi 16 byte dell'hash (32 caratteri esadecimali), come prima
+  return (await sha256(s)).slice(0, 32)
 }

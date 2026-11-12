@@ -3,6 +3,7 @@ import { Check, Clock } from 'lucide-react'
 import { LESSONS, MODULES } from '../learn/content'
 import { useLearnProgress } from '../lib/data'
 import { Bar, PageHeader } from '../components/ui'
+import { BackButton } from '../components/back'
 
 export default function Learn() {
   const { data: progress = [] } = useLearnProgress()
@@ -12,6 +13,7 @@ export default function Learn() {
 
   return (
     <div>
+      <BackButton label="Home" fallback="/" />
       <PageHeader title="Impara" subtitle="Le idee migliori dei libri di finanza personale, adattate all'Italia e collegate ai tuoi numeri." />
 
       <section className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">

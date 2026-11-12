@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Link, useGo } from '../components/nav'
-import { ArrowLeft, Pencil, Archive, Trash2, Scale, ArchiveRestore } from 'lucide-react'
+import { useGo } from '../components/nav'
+import { Pencil, Archive, Trash2, Scale, ArchiveRestore } from 'lucide-react'
 import { endOfMonth, format, subMonths } from 'date-fns'
-import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { BackButton } from '../components/back'
+import { ScrubChart } from '../components/NetworthCard'
+import { it } from 'date-fns/locale'
 import { useAccounts, useBalances, useCategories, useSnapshots, useTable, useTransactions } from '../lib/data'
 import { balanceAt } from '../lib/finance'
-import { money, monthShort, monthLabel, longDate } from '../lib/format'
+import { money, monthLabel, longDate } from '../lib/format'
 import { ACCOUNT_TYPES, type Account } from '../lib/types'
 import { TxRow } from '../components/TxRow'
 import { AccountForm } from '../components/AccountForm'
@@ -28,20 +30,25 @@ export default function AccountDetail() {
   const [bal, setBal] = useState(false)
   const [limit, setLimit] = useState(30)
   const [askDelete, setAskDelete] = useState(false)
+  const [scrub, setScrub] = useState<number | null>(null)
 
   const acc = accounts?.find((a) => a.id === id)
   const own = useMemo(() => txs.filter((t) => t.account_id === id), [txs, id])
   const series = useMemo(() => {
     if (!acc) return []
-    return Array.from({ length: 12 }, (_, i) => {
-      const m = subMonths(new Date(), 11 - i)
-      const day = i === 11 ? format(new Date(), 'yyyy-MM-dd') : format(endOfMonth(m), 'yyyy-MM-dd')
+    // Tutta la storia del conto (almeno un anno): se ne vedono 12 mesi, col dito si torna indietro
+    const mine = txs.filter((t) => t.account_id === acc.id)
+    const oldest = mine.length ? mine[mine.length - 1].date : null
+    const n = Math.min(120, Math.max(12, oldest ? (new Date().getFullYear() - +oldest.slice(0, 4)) * 12 + new Date().getMonth() - (+oldest.slice(5, 7) - 1) + 1 : 12))
+    return Array.from({ length: n }, (_, i) => {
+      const m = subMonths(new Date(), n - 1 - i)
+      const day = i === n - 1 ? format(new Date(), 'yyyy-MM-dd') : format(endOfMonth(m), 'yyyy-MM-dd')
       return { month: m, value: balanceAt(acc, day, txs, snaps) }
     })
   }, [acc, txs, snaps])
 
   if (!accounts) return <SkeletonPage />
-  if (!acc) return <Empty title="Conto non trovato" action={<Link to="/conti" className="btn btn-ghost">Torna ai conti</Link>} />
+  if (!acc) return <Empty title="Conto non trovato" action={<button onClick={() => nav('/patrimonio')} className="btn btn-ghost">Torna al patrimonio</button>} />
 
   const b = balances?.get(acc.id)
   const catMap = new Map(categories.map((c) => [c.id, c]))
@@ -49,10 +56,10 @@ export default function AccountDetail() {
 
   return (
     <div>
-      <Link to="/conti" className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-muted hover:text-ink"><ArrowLeft size={16} /> Conti</Link>
+      <BackButton label="Patrimonio" fallback="/patrimonio" always />
       <header className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <span className="h-14 w-14 rounded-full" style={{ background: acc.color }} />
+        <div className="flex min-w-0 items-center gap-4">
+          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[20px] text-xl font-semibold text-white" style={{ background: acc.color }}>{acc.name.slice(0, 1).toUpperCase()}</span>
           <div>
             <h1 className="text-2xl font-semibold tracking-[-0.02em]">{acc.name}</h1>
             <p className="text-muted">{[acc.institution, ACCOUNT_TYPES[acc.type].label].filter(Boolean).join(', ')}</p>
@@ -64,22 +71,14 @@ export default function AccountDetail() {
         </div>
       </header>
 
-      <p className="num mt-6 text-5xl font-semibold tracking-[-0.03em]">{money(b?.balance ?? 0)}</p>
-      <p className="mt-1 text-sm text-muted">{b?.snapshot_date ? `Ultimo saldo verificato il ${longDate(b.snapshot_date)}` : 'Saldo non ancora impostato'}</p>
+      <p className="num mt-6 text-5xl font-semibold tracking-[-0.03em]">{money(scrub !== null ? series[scrub].value : b?.balance ?? 0)}</p>
+      <p className="mt-1 text-sm text-muted first-letter:uppercase">
+        {scrub !== null ? `Fine ${monthLabel(series[scrub].month)}` : b?.snapshot_date ? `Ultimo saldo verificato il ${longDate(b.snapshot_date)}` : 'Saldo non ancora impostato'}
+      </p>
 
-      <div className="mt-6 h-44 rounded-3xl bg-surface p-3" role="img" aria-label="Saldo negli ultimi 12 mesi">
-        <ResponsiveContainer>
-          <AreaChart data={series} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
-            <XAxis dataKey="month" tickFormatter={(d: Date) => monthShort(d)} tickLine={false} axisLine={false} tick={{ fill: 'var(--faint)', fontSize: 11 }} interval="preserveStartEnd" />
-            <YAxis hide domain={['auto', 'auto']} />
-            <Tooltip content={({ active, payload }) => active && payload?.[0] ? (
-              <div className="rounded-xl border border-line bg-surface px-3 py-2 text-sm shadow-lg">
-                <div className="num font-semibold">{money(payload[0].value as number)}</div>
-                <div className="text-xs text-muted capitalize">{monthLabel((payload[0].payload as { month: Date }).month)}</div>
-              </div>) : null} />
-            <Area type="monotone" dataKey="value" stroke={acc.color} strokeWidth={2} fill={acc.color} fillOpacity={0.12} isAnimationActive={false} />
-          </AreaChart>
-        </ResponsiveContainer>
+      <div className="mt-5 rounded-3xl bg-surface pt-4 pb-2" style={{ color: acc.color }}>
+        <ScrubChart data={series} view={12} height={130} className="mx-4" onScrub={setScrub} label={(i) => format(series[i].month, 'MMM yy', { locale: it })} />
+        <p className="mt-1 px-4 text-xs text-faint">{series.length > 12 ? 'Tocca il grafico per i valori, trascina la barra per i mesi precedenti' : 'Tocca o trascina sul grafico per vedere i valori'}</p>
       </div>
 
       {accSnaps.length > 0 && (
@@ -111,7 +110,7 @@ export default function AccountDetail() {
       <Confirm open={askDelete} onClose={() => setAskDelete(false)} danger confirmLabel="Elimina conto"
         title={`Eliminare ${acc.name}?`}
         text={own.length ? `Verranno eliminati anche i suoi ${own.length} movimenti. Non si può annullare: se vuoi solo nasconderlo, usa Archivia.` : 'Il conto non ha movimenti. Non si può annullare.'}
-        onConfirm={async () => { await remove.mutateAsync(acc.id); setAskDelete(false); toast('Conto eliminato'); nav('/conti') }} />
+        onConfirm={async () => { await remove.mutateAsync(acc.id); setAskDelete(false); toast('Conto eliminato'); nav('/patrimonio') }} />
       {edit && <AccountForm open account={acc} onClose={() => setEdit(false)} />}
       {bal && <BalanceSheet open onlyId={acc.id} onClose={() => setBal(false)} />}
     </div>

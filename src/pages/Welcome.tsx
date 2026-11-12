@@ -73,7 +73,7 @@ export default function Welcome() {
         {STEPS.map((s, i) => <span key={s} className={`h-1.5 flex-1 rounded-full transition-colors duration-500 ${i <= step ? 'bg-brand' : 'bg-line'}`} />)}
       </div>
 
-      <div key={step} className="swipe-in-left">
+      <div key={step} className="step-in">
         {step === 0 && (
           <section className="relative overflow-hidden rounded-[28px] bg-note p-7 text-note-ink">
             <Guilloche className="pointer-events-none absolute -right-32 -top-32 h-[420px] w-[420px] opacity-40" />

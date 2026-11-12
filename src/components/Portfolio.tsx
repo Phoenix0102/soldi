@@ -174,7 +174,7 @@ function HoldingForm({ accountId, holding, onClose, onSaved }: { accountId: stri
           <div>
             <Label>Cerca per ISIN, ticker o nome</Label>
             <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); doSearch() }}>
-              <input className="field" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Es. VWCE, IE00BK5BQT80" />
+              <input className="field" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Es. VWCE, IE00BK5BQT80" />
               <button className="btn btn-primary !px-3.5" aria-label="Cerca">{searching ? <Loader2 size={17} className="animate-spin" /> : <Search size={17} />}</button>
             </form>
             {results.length > 0 && (

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Download, LogOut, Plus, Trash2, Lock, KeyRound, ScanFace } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Download, LogOut, Plus, Trash2, Lock, KeyRound, ScanFace, Link2, Tags, Database, ChevronRight, GraduationCap, FileBarChart, Upload, Sparkles, Check, BarChart3, Repeat, CalendarHeart } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAccounts, useCategories, useRules, useTable, useTransactions } from '../lib/data'
 import { getTheme, setTheme, type Theme } from '../lib/theme'
@@ -8,83 +9,228 @@ import { clearPin, hasPin, lockMinutes, setLockMinutes } from '../auth/pin'
 import { PinSetup } from '../auth/Gate'
 import { Link } from '../components/nav'
 import { Badge, COLORS, ICON_NAMES, Icon } from '../components/Icon'
-import { Label, PageHeader, Segmented, Sheet, useToast } from '../components/ui'
+import { Label, PageHeader, Segmented, Sheet, Switch, useToast } from '../components/ui'
 import type { Category, Rule } from '../lib/types'
 import { ApplePaySetup } from '../components/ApplePaySetup'
 import { NotifySetup } from '../components/NotifySetup'
 import { BankSetup } from '../components/BankSetup'
-import { useSearchParams } from 'react-router-dom'
-import { bioAvailable, bioEnabled, disableBio, enableBio } from '../lib/biometric'
+import { useParams } from 'react-router-dom'
+import { BackButton } from '../components/back'
+import { haptic } from '../lib/motion'
+import { bioEnabled, bioStatus, disableBio, enableBio, type BioStatus } from '../lib/biometric'
+import { isNative } from '../lib/native'
+import { openAppSettings } from '../lib/widget'
+
+const SECTIONS = [
+  { id: 'sicurezza', title: 'Sicurezza', text: 'PIN, Face ID, chiave di accesso', icon: Lock, color: '#0f4d3a' },
+  { id: 'collegamenti', title: 'Collegamenti', text: 'Notifiche, Apple Pay, AI, banche', icon: Link2, color: '#2563eb' },
+  { id: 'categorie', title: 'Categorie e regole', text: 'Come vengono smistati i movimenti', icon: Tags, color: '#a87b22' },
+  { id: 'dati', title: 'I tuoi dati', text: 'Importa, esporta, backup', icon: Database, color: '#7c3aed' },
+] as const
 
 export default function SettingsPage() {
-  const toast = useToast()
+  const { section } = useParams()
+  const current = SECTIONS.find((x) => x.id === section)
+  if (current) {
+    return (
+      <div>
+        <BackButton label="Impostazioni" fallback="/impostazioni" always />
+        <PageHeader title={current.title} />
+        <div className="space-y-10">
+          {current.id === 'sicurezza' && <SecuritySection />}
+          {current.id === 'collegamenti' && <><NotifySetup /><AiSetup /><div id="applepay"><ApplePaySetup /></div><BankSetup /></>}
+          {current.id === 'categorie' && <><CategoriesSection /><RulesSection /></>}
+          {current.id === 'dati' && <DataSection />}
+        </div>
+      </div>
+    )
+  }
+  return <SettingsHome />
+}
+
+function SettingsHome() {
   const [theme, setT] = useState<Theme>(getTheme())
+  return (
+    <div>
+      <BackButton label="Home" fallback="/" />
+      <PageHeader title="Impostazioni" />
+      <div className="space-y-8">
+        <Section title="Aspetto">
+          <Segmented value={theme} onChange={(t) => { setT(t); setTheme(t); haptic('tick') }}
+            options={[{ value: 'system', label: 'Automatico' }, { value: 'light', label: 'Chiaro' }, { value: 'dark', label: 'Scuro' }]} />
+        </Section>
+        <ul className="divide-y divide-line overflow-hidden rounded-3xl bg-surface">
+          {SECTIONS.map(({ id, title, text, icon: I, color }) => (
+            <li key={id}>
+              <Link to={`/impostazioni/${id}`} className="press flex items-center gap-3.5 px-4 py-3.5">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white" style={{ background: color }}><I size={18} /></span>
+                <span className="min-w-0 flex-1"><span className="block font-medium">{title}</span><span className="block truncate text-sm text-muted">{text}</span></span>
+                <ChevronRight size={18} className="text-faint" />
+              </Link>
+            </li>
+          ))}
+        </ul>
+        <ul className="divide-y divide-line overflow-hidden rounded-3xl bg-surface">
+          {([['/consulente', 'Consulente AI', Sparkles], ['/statistiche', 'Statistiche', BarChart3], ['/abbonamenti', 'Spese fisse', Repeat], ['/anno', 'Il tuo anno', CalendarHeart]] as const).map(([to, label, I]) => (
+            <li key={to}>
+              <Link to={to} className="press flex items-center gap-3.5 px-4 py-3.5">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand"><I size={18} /></span>
+                <span className="flex-1 font-medium">{label}</span><ChevronRight size={18} className="text-faint" />
+              </Link>
+            </li>
+          ))}
+          <li>
+            <Link to="/impara" className="press flex items-center gap-3.5 px-4 py-3.5">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand"><GraduationCap size={18} /></span>
+              <span className="flex-1 font-medium">Impara</span><ChevronRight size={18} className="text-faint" />
+            </Link>
+          </li>
+          <li>
+            <Link to="/resoconto" className="press flex items-center gap-3.5 px-4 py-3.5">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand"><FileBarChart size={18} /></span>
+              <span className="flex-1 font-medium">Resoconto mensile</span><ChevronRight size={18} className="text-faint" />
+            </Link>
+          </li>
+        </ul>
+        <p className="text-center text-xs text-faint">Soldi · fatto su misura per Jacopo</p>
+      </div>
+    </div>
+  )
+}
+
+function SecuritySection() {
+  const toast = useToast()
   const [pinOn, setPinOn] = useState(hasPin())
   const [pinSetup, setPinSetup] = useState(false)
   const [lock, setLock] = useState(lockMinutes())
   const [pwOpen, setPwOpen] = useState(false)
-  const [bioOk, setBioOk] = useState(false)
+  const [bio, setBio] = useState<BioStatus | null>(null)
   const [bioOn, setBioOn] = useState(bioEnabled())
-  const [sp] = useSearchParams()
   useEffect(() => {
-    const id = sp.get('sezione')
-    if (id) setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 350)
-  }, [sp])
-  useEffect(() => { bioAvailable().then(setBioOk) }, [])
+    const check = () => bioStatus().then(setBio)
+    check()
+    // Tornando dalle Impostazioni di iOS ricontrollo il permesso
+    document.addEventListener('visibilitychange', check)
+    return () => document.removeEventListener('visibilitychange', check)
+  }, [])
 
-  if (pinSetup) return createPortal(<div className="fixed inset-0 z-[70]"><PinSetup onDone={() => { setPinSetup(false); setPinOn(hasPin()); toast('PIN impostato') }} /></div>, document.body)
+  if (pinSetup) return createPortal(<div className="fixed inset-0 z-[70]"><PinSetup onCancel={() => setPinSetup(false)} onDone={() => { setPinSetup(false); setPinOn(hasPin()); setBioOn(bioEnabled()); if (hasPin()) toast('PIN impostato') }} /></div>, document.body)
+
+  const bioName = bio?.type === 'touchid' ? 'Touch ID' : 'Face ID'
+  const bioText = !bio ? 'Controllo in corso…'
+    : !pinOn ? `Attiva prima il blocco con PIN`
+    : bio.available ? (bioOn ? 'Apri l\'app guardando l\'iPhone' : 'Il PIN resta come riserva')
+    : bio.problem === 'not-enrolled' ? 'Configuralo nelle Impostazioni dell\'iPhone › Face ID e codice'
+    : bio.problem === 'no-passcode' ? 'Imposta un codice sull\'iPhone per usarlo'
+    : bio.problem === 'lockout' ? 'Bloccato dopo troppi tentativi: sblocca l\'iPhone col codice e riprova'
+    : bio.problem === 'denied' ? 'Permesso negato: tocca Consenti e accendi Face ID per Soldi'
+    : `Non disponibile${bio.detail ? ` (${bio.detail})` : ''}`
 
   return (
-    <div>
-      <PageHeader title="Impostazioni" />
-      <div className="space-y-10">
-        <Section title="Aspetto">
-          <Segmented value={theme} onChange={(t) => { setT(t); setTheme(t) }}
-            options={[{ value: 'system', label: 'Automatico' }, { value: 'light', label: 'Chiaro' }, { value: 'dark', label: 'Scuro' }]} />
-        </Section>
+    <>
+      <p className="mb-2 px-1 text-xs font-semibold tracking-wide text-faint uppercase">Blocco dell'app</p>
+      <div className="divide-y divide-line rounded-3xl bg-surface">
+        <Row icon={<Lock size={18} />} title="Blocco con PIN" text={pinOn ? 'Chiede il PIN quando apri l\'app' : 'Spento: chi prende il telefono vede i tuoi dati'}>
+          <Switch label="Blocco con PIN" checked={pinOn} onChange={(v) => { if (v) setPinSetup(true); else { clearPin(); setPinOn(false); toast('Blocco disattivato') } }} />
+        </Row>
+        {(isNative() || bio?.available) && (
+          <Row icon={<ScanFace size={18} />} title={bioName} text={bioText}>
+            {bio && (bio.available || !pinOn ? (
+              <Switch label={bioName} checked={pinOn && bio.available && bioOn} disabled={!pinOn || !bio.available} onChange={async (v) => {
+                if (!v) { disableBio(); setBioOn(false); toast(`${bioName} disattivato`); return }
+                try { await enableBio(); setBioOn(true); toast(`${bioName} attivo`) } catch { toast(`${bioName} non confermato`, { tone: 'err' }) }
+              }} />
+            ) : bio.problem === 'denied' ? (
+              <button className="btn btn-primary !px-3.5 !py-1.5" onClick={() => openAppSettings()}>Consenti</button>
+            ) : bio.problem === 'error' ? (
+              <button className="btn btn-ghost !px-3.5 !py-1.5" onClick={() => { setBio(null); bioStatus().then(setBio) }}>Riprova</button>
+            ) : null)}
+          </Row>
+        )}
+        {pinOn && (
+          <>
+            <Row title="Blocca dopo" text="Minuti senza usare l'app">
+              <select className="field !w-auto !py-1.5" value={lock} onChange={(e) => { setLock(+e.target.value); setLockMinutes(+e.target.value) }}>
+                {[1, 2, 5, 10, 30].map((m) => <option key={m} value={m}>{m} min</option>)}
+              </select>
+            </Row>
+            <button className="press block w-full px-4 py-3.5 text-left font-medium text-brand" onClick={() => setPinSetup(true)}>Cambia PIN</button>
+          </>
+        )}
+      </div>
 
-        <Section title="Sicurezza">
-          <div className="divide-y divide-line rounded-3xl bg-surface">
-            <Row icon={<Lock size={18} />} title="PIN di sblocco" text={pinOn ? 'Attivo su questo dispositivo' : 'Disattivato: chiunque usi questo dispositivo vede i tuoi dati'}>
-              <div className="flex gap-2">
-                <button className="btn btn-ghost !py-1.5" onClick={() => setPinSetup(true)}>{pinOn ? 'Cambia' : 'Attiva'}</button>
-                {pinOn && <button className="btn btn-ghost !py-1.5" onClick={() => { clearPin(); setPinOn(false); toast('PIN disattivato') }}>Disattiva</button>}
-              </div>
-            </Row>
-            {pinOn && (
-              <Row title="Blocca dopo" text="Minuti di inattività prima di richiedere il PIN">
-                <select className="field !w-auto !py-1.5" value={lock} onChange={(e) => { setLock(+e.target.value); setLockMinutes(+e.target.value) }}>
-                  {[1, 2, 5, 10, 30].map((m) => <option key={m} value={m}>{m} min</option>)}
-                </select>
-              </Row>
-            )}
-            {bioOk && pinOn && (
-              <Row icon={<ScanFace size={18} />} title="Face ID o impronta" text={bioOn ? 'Sblocchi l\'app senza digitare il PIN' : 'Al posto del PIN, che resta come riserva'}>
-                <button className="btn btn-ghost !py-1.5" onClick={async () => {
-                  if (bioOn) { disableBio(); setBioOn(false); toast('Face ID disattivato'); return }
-                  try { await enableBio(); setBioOn(true); toast('Face ID attivo') } catch { toast('Attivazione annullata', { tone: 'err' }) }
-                }}>{bioOn ? 'Disattiva' : 'Attiva'}</button>
-              </Row>
-            )}
-            <Row icon={<KeyRound size={18} />} title="Chiave di accesso" text="Serve per collegare un nuovo dispositivo">
-              <button className="btn btn-ghost !py-1.5" onClick={() => setPwOpen(true)}>Cambia</button>
-            </Row>
-            <Row icon={<LogOut size={18} />} title="Esci da questo dispositivo" text="Per rientrare servirà la chiave di accesso">
-              <button className="btn btn-danger !py-1.5" onClick={async () => { await supabase.auth.signOut(); localStorage.removeItem('soldi-pin') }}>Esci</button>
-            </Row>
-          </div>
-        </Section>
-
-        <BankSetup />
-        <NotifySetup />
-        <div id="applepay"><ApplePaySetup /></div>
-        <CategoriesSection />
-        <RulesSection />
-        <ExportSection />
-        <p className="text-sm text-muted"><Link to="/benvenuto" className="underline underline-offset-4">Rifai la configurazione guidata</Link></p>
+      <p className="mt-6 mb-2 px-1 text-xs font-semibold tracking-wide text-faint uppercase">Account</p>
+      <div className="divide-y divide-line rounded-3xl bg-surface">
+        <Row icon={<KeyRound size={18} />} title="Chiave di accesso" text="Serve per collegare un nuovo dispositivo">
+          <button className="btn btn-ghost !px-3.5 !py-1.5" onClick={() => setPwOpen(true)}>Cambia</button>
+        </Row>
+        <Row icon={<LogOut size={18} />} title="Esci da questo dispositivo" text="Per rientrare servirà la chiave">
+          <button className="btn btn-danger !px-3.5 !py-1.5" onClick={async () => { await supabase.auth.signOut(); localStorage.removeItem('soldi-pin') }}>Esci</button>
+        </Row>
       </div>
       {pwOpen && <PasswordSheet onClose={() => setPwOpen(false)} />}
-    </div>
+    </>
+  )
+}
+
+function DataSection() {
+  return (
+    <>
+      <Section title="Importa" text="Estratti conto in CSV o Excel dall'home banking.">
+        <Link to="/importa" className="btn btn-primary"><Upload size={17} /> Importa estratto conto</Link>
+      </Section>
+      <ExportSection />
+      <p className="text-sm text-muted"><Link to="/benvenuto" className="underline underline-offset-4">Rifai la configurazione guidata</Link></p>
+    </>
+  )
+}
+
+/** Chiave API di Anthropic per i suggerimenti di categoria (resta sul server). */
+function AiSetup() {
+  const toast = useToast()
+  const qc = useQueryClient()
+  const status = useQuery({ queryKey: ['ai-status'], queryFn: async () => {
+    const { data, error } = await supabase.functions.invoke('categorize', { body: { action: 'status' } })
+    if (error) throw error
+    return data as { configured: boolean }
+  } })
+  const [key, setKey] = useState('')
+  const [busy, setBusy] = useState(false)
+  const call = async (body: Record<string, unknown>) => {
+    const { error } = await supabase.functions.invoke('categorize', { body })
+    if (error) {
+      const ctx = (error as { context?: Response }).context
+      throw new Error((ctx ? await ctx.json().then((j) => j.error).catch(() => null) : null) ?? error.message)
+    }
+  }
+  return (
+    <section>
+      <div className="mb-3">
+        <h2 className="flex items-center gap-2 text-lg font-semibold"><Sparkles size={18} /> Categorizzazione con l'AI</h2>
+        <p className="text-sm text-muted">Quando nessuna regola riconosce un esercente, Claude propone la categoria. Decidi sempre tu se accettarla.</p>
+      </div>
+      <div className="space-y-3 rounded-3xl bg-surface p-5">
+        {status.isLoading ? <p className="text-sm text-muted">Controllo…</p> : status.data?.configured ? (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="flex items-center gap-2 text-sm"><Check size={16} className="text-pos" /> Attiva. La trovi in Smista.</p>
+            <button className="btn btn-ghost !py-1.5" onClick={async () => { await call({ action: 'forget' }); qc.invalidateQueries({ queryKey: ['ai-status'] }); toast('Chiave rimossa') }}>Rimuovi chiave</button>
+          </div>
+        ) : (
+          <>
+            <p className="text-sm text-muted">Crea una chiave su <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer" className="text-ink underline underline-offset-4">console.anthropic.com</a> e incollala qui. Il costo è di pochi centesimi al mese.</p>
+            <div className="flex gap-2">
+              <input className="field flex-1" type="password" placeholder="sk-ant-…" value={key} onChange={(e) => setKey(e.target.value)} autoComplete="off" />
+              <button className="btn btn-primary" disabled={busy || key.trim().length < 20} onClick={async () => {
+                setBusy(true)
+                try { await call({ action: 'configure', key }); setKey(''); qc.invalidateQueries({ queryKey: ['ai-status'] }); toast('Suggerimenti AI attivi') }
+                catch (e) { toast((e as Error).message, { tone: 'err' }) }
+                finally { setBusy(false) }
+              }}>{busy ? 'Verifico…' : 'Salva'}</button>
+            </div>
+          </>
+        )}
+      </div>
+    </section>
   )
 }
 
@@ -100,12 +246,12 @@ function Section({ title, text, children, right }: { title: string; text?: strin
   )
 }
 
-function Row({ icon, title, text, children }: { icon?: React.ReactNode; title: string; text?: string; children: React.ReactNode }) {
+function Row({ icon, title, text, children }: { icon?: React.ReactNode; title: string; text?: string; children?: React.ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center gap-4 px-5 py-4">
-      {icon && <span className="text-muted">{icon}</span>}
-      <div className="min-w-0 flex-1"><p className="font-medium">{title}</p>{text && <p className="text-sm text-muted">{text}</p>}</div>
-      {children}
+    <div className="flex items-center gap-3.5 px-4 py-3.5">
+      {icon && <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sunken text-muted">{icon}</span>}
+      <div className="min-w-0 flex-1"><p className="font-medium">{title}</p>{text && <p className="text-sm leading-snug text-muted">{text}</p>}</div>
+      {children && <div className="shrink-0">{children}</div>}
     </div>
   )
 }
@@ -142,7 +288,7 @@ function CategoriesSection() {
         {list.map((c) => (
           <button key={c.id} onClick={() => setEdit(c)} className={`flex items-center gap-3 rounded-2xl bg-surface p-3 text-left hover:bg-sunken ${c.archived ? 'opacity-40' : ''}`}>
             <Badge icon={c.icon} color={c.color} size={34} />
-            <span className="min-w-0"><span className="block truncate text-sm font-medium">{c.name}</span>{c.group_name && <span className="block truncate text-xs text-muted">{c.group_name}</span>}</span>
+            <span className="min-w-0"><span className="block truncate text-sm font-medium">{c.name}</span>{(c.group_name || c.deductible) && <span className="block truncate text-xs text-muted">{[c.group_name, c.deductible && '730'].filter(Boolean).join(' · ')}</span>}</span>
           </button>
         ))}
       </div>
@@ -159,21 +305,29 @@ function CategoryForm({ cat, kind, onClose }: { cat?: Category; kind: 'expense' 
   const [icon, setIcon] = useState(cat?.icon ?? 'circle')
   const [color, setColor] = useState(cat?.color ?? COLORS[4])
   const [group, setGroup] = useState(cat?.group_name ?? '')
+  const [deductible, setDeductible] = useState(!!cat?.deductible)
   const groups = [...new Set(categories.filter((c) => c.kind === 'expense').map((c) => c.group_name).filter(Boolean))] as string[]
   const save = async () => {
     if (!name.trim()) return
-    const row = { name: name.trim(), icon, color, group_name: (cat?.kind ?? kind) === 'expense' ? group.trim() || null : null }
+    const isExp = (cat?.kind ?? kind) === 'expense'
+    const row = { name: name.trim(), icon, color, group_name: isExp ? group.trim() || null : null, deductible: isExp && deductible }
     if (cat) await update.mutateAsync({ id: cat.id, ...row }); else await insert.mutateAsync({ ...row, kind, sort: 100 })
     toast(cat ? 'Categoria aggiornata' : 'Categoria creata'); onClose()
   }
   return (
     <Sheet open onClose={onClose} title={cat ? 'Modifica categoria' : 'Nuova categoria'}>
       <div className="space-y-4">
-        <div className="flex items-center gap-3"><Badge icon={icon} color={color} size={48} /><input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome" autoFocus /></div>
+        <div className="flex items-center gap-3"><Badge icon={icon} color={color} size={48} /><input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome" /></div>
         {(cat?.kind ?? kind) === 'expense' && (
           <label className="block"><Label>Gruppo</Label>
             <input className="field" list="cat-groups" value={group} onChange={(e) => setGroup(e.target.value)} placeholder="Es. Casa" />
             <datalist id="cat-groups">{groups.map((g) => <option key={g} value={g} />)}</datalist>
+          </label>
+        )}
+        {(cat?.kind ?? kind) === 'expense' && (
+          <label className="flex items-center justify-between gap-3 rounded-2xl bg-sunken px-4 py-3">
+            <span><span className="block text-sm font-medium">Detraibile nel 730</span><span className="block text-xs text-muted">Es. visite mediche, farmaci, università, sport dei figli: le trovi in Statistiche › 730</span></span>
+            <input type="checkbox" checked={deductible} onChange={(e) => setDeductible(e.target.checked)} className="h-5 w-5 shrink-0 accent-[var(--brand)]" />
           </label>
         )}
         <div><Label>Icona</Label>
@@ -196,31 +350,43 @@ function CategoryForm({ cat, kind, onClose }: { cat?: Category; kind: 'expense' 
 function RulesSection() {
   const { data: rules = [] } = useRules()
   const { data: categories = [] } = useCategories()
+  const { data: accounts = [] } = useAccounts()
   const { insert, remove } = useTable<Rule & Record<string, unknown>>('rules')
   const toast = useToast()
   const [pattern, setPattern] = useState('')
-  const [cat, setCat] = useState('')
+  const [target, setTarget] = useState('')
   const [q, setQ] = useState('')
   const catMap = new Map(categories.map((c) => [c.id, c]))
-  const shown = rules.filter((r) => !q || r.pattern.toLowerCase().includes(q.toLowerCase()) || catMap.get(r.category_id ?? '')?.name.toLowerCase().includes(q.toLowerCase()))
+  const accMap = new Map(accounts.map((a) => [a.id, a]))
+  const debts = accounts.filter((a) => a.type === 'debt' && !a.archived)
+  const label = (r: Rule) => r.action === 'transfer' ? 'Giroconto' : r.action === 'debt' ? `Rata · ${accMap.get(r.target_account_id ?? '')?.name ?? 'debito'}` : catMap.get(r.category_id ?? '')?.name ?? '—'
+  const shown = rules.filter((r) => !q || r.pattern.toLowerCase().includes(q.toLowerCase()) || label(r).toLowerCase().includes(q.toLowerCase()))
+  const add = async () => {
+    const row: Pick<Rule, 'action' | 'category_id' | 'target_account_id'> = target === 'transfer' ? { action: 'transfer', category_id: null, target_account_id: null }
+      : target.startsWith('debt:') ? { action: 'debt', category_id: null, target_account_id: target.slice(5) }
+      : { action: 'category', category_id: target, target_account_id: null }
+    await insert.mutateAsync({ pattern: pattern.trim().toUpperCase(), priority: 10, ...row })
+    setPattern(''); toast('Regola aggiunta')
+  }
   return (
-    <Section title="Regole automatiche" text="Se la descrizione di un movimento contiene il testo, gli assegno la categoria. Valgono per l'import e per l'inserimento rapido.">
+    <Section title="Regole automatiche" text="Se la descrizione contiene il testo, il movimento viene categorizzato, segnato come giroconto o usato come rata di un debito. Valgono per import e inserimento rapido.">
       <div className="flex flex-wrap gap-2 rounded-3xl bg-surface p-4">
         <input className="field min-w-40 flex-1" placeholder="Se contiene… es. ESSELUNGA" value={pattern} onChange={(e) => setPattern(e.target.value)} />
-        <select className="field min-w-40 flex-1" value={cat} onChange={(e) => setCat(e.target.value)}>
-          <option value="">Categoria…</option>
-          {categories.filter((c) => !c.archived).map((c) => <option key={c.id} value={c.id}>{c.kind === 'income' ? 'Entrata: ' : ''}{c.name}</option>)}
+        <select className="field min-w-40 flex-1" value={target} onChange={(e) => setTarget(e.target.value)}>
+          <option value="">Cosa fare…</option>
+          <option value="transfer">↔ Giroconto tra miei conti</option>
+          {debts.map((d) => <option key={d.id} value={`debt:${d.id}`}>Rata di {d.name}</option>)}
+          <optgroup label="Uscite">{categories.filter((c) => !c.archived && c.kind === 'expense').map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</optgroup>
+          <optgroup label="Entrate">{categories.filter((c) => !c.archived && c.kind === 'income').map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</optgroup>
         </select>
-        <button className="btn btn-primary" disabled={!pattern.trim() || !cat} onClick={async () => {
-          await insert.mutateAsync({ pattern: pattern.trim().toUpperCase(), category_id: cat, priority: 10 }); setPattern(''); toast('Regola aggiunta')
-        }}><Plus size={16} /> Aggiungi</button>
+        <button className="btn btn-primary" disabled={!pattern.trim() || !target} onClick={add}><Plus size={16} /> Aggiungi</button>
       </div>
       <input className="field mt-3" placeholder={`Cerca tra ${rules.length} regole`} value={q} onChange={(e) => setQ(e.target.value)} />
-      <ul className="mt-2 max-h-80 divide-y divide-line overflow-y-auto rounded-3xl bg-surface">
+      <ul className="mt-2 max-h-96 divide-y divide-line overflow-y-auto overscroll-contain rounded-3xl bg-surface">
         {shown.map((r) => (
           <li key={r.id} className="flex items-center gap-3 px-5 py-2.5 text-sm">
             <code className="flex-1 truncate font-medium">{r.pattern.trim()}</code>
-            <span className="text-muted">{catMap.get(r.category_id ?? '')?.name ?? '—'}</span>
+            <span className={`truncate ${r.action === 'category' ? 'text-muted' : 'text-brand'}`}>{label(r)}</span>
             <button onClick={() => remove.mutate(r.id)} className="rounded-full p-1.5 text-faint hover:bg-sunken hover:text-neg" aria-label={`Elimina regola ${r.pattern}`}><Trash2 size={15} /></button>
           </li>
         ))}

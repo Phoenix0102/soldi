@@ -55,7 +55,7 @@ export const useTransactions = () =>
   useQuery({
     queryKey: ['transactions'],
     queryFn: async () => {
-      const rows = num(await fetchAll<Transaction>('transactions', 'date', false), ['amount'])
+      const rows = num(await fetchAll<Transaction>('transactions', 'date', false), ['amount', 'original_amount'])
       return rows.sort((a, b) => (a.date === b.date ? b.created_at.localeCompare(a.created_at) : b.date.localeCompare(a.date)))
     },
   })

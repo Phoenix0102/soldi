@@ -1,0 +1,116 @@
+name: App iOS → TestFlight
+
+# Compila l'app iOS su un Mac di GitHub, la firma e la carica su TestFlight.
+# Segreti richiesti (Settings › Secrets and variables › Actions):
+#   ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 (contenuto del file .p8), APPLE_TEAM_ID
+on:
+  push:
+    branches: [main, app-ios]
+    paths-ignore: ['supabase/**', '**.md']
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: Mac di GitHub da usare
+        default: macos-15-intel
+        type: choice
+        options: [macos-15-intel, macos-26, macos-15]
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  testflight:
+    # I Mac Apple Silicon gratuiti a volte sono saturi: quelli Intel hanno una coda separata
+    runs-on: ${{ inputs.runner || 'macos-15-intel' }}
+    timeout-minutes: 45
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - name: Controllo segreti
+        id: secrets
+        run: |
+          if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$ASC_KEY_P8" ] || [ -z "$APPLE_TEAM_ID" ]; then
+            echo "::warning::Mancano i segreti per App Store Connect: build saltata"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.secrets.outputs.ok == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.secrets.outputs.ok == 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Web app per iOS
+        if: steps.secrets.outputs.ok == 'true'
+        run: |
+          npm ci
+          npm run build:native
+          npx cap sync ios
+
+      - name: Chiave API App Store Connect
+        if: steps.secrets.outputs.ok == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/keys" ~/.appstoreconnect/private_keys
+          printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8"
+          cp "$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8" ~/.appstoreconnect/private_keys/
+          /usr/libexec/PlistBuddy -c "Add :teamID string $APPLE_TEAM_ID" ios/ExportOptions.plist
+          # App Store Connect richiede l'SDK di iOS 26: uso l'Xcode 26 più recente installato
+          XC=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$XC" ]; then sudo xcode-select -s "$XC"; fi
+          xcodebuild -version
+
+      - name: Certificato di sviluppo pulito
+        if: steps.secrets.outputs.ok == 'true'
+        env:
+          ASC_KEY_PATH: ${{ runner.temp }}/keys/AuthKey_${{ secrets.ASC_KEY_ID }}.p8
+        run: node scripts/asc-reset-dev-cert.mjs
+
+      - name: Archivio firmato
+        if: steps.secrets.outputs.ok == 'true'
+        run: |
+          xcodebuild archive \
+            -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Soldi.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            -quiet
+
+      - name: File .ipa firmato per App Store Connect
+        if: steps.secrets.outputs.ok == 'true'
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Soldi.xcarchive" \
+            -exportOptionsPlist ios/ExportOptions.plist \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+          ls -la "$RUNNER_TEMP/export"
+
+      - name: Caricamento su TestFlight
+        if: steps.secrets.outputs.ok == 'true'
+        run: |
+          xcrun altool --upload-app -t ios -f "$RUNNER_TEMP/export/App.ipa" \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" --output-format normal
+          echo "### Build ${{ github.run_number }} caricata su TestFlight" >> "$GITHUB_STEP_SUMMARY"
+          echo "Tra 5-15 minuti la trovi nell'app TestFlight sull'iPhone." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Pulizia chiave
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/keys" ~/.appstoreconnect/private_keys

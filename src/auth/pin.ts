@@ -2,18 +2,20 @@ const KEY = 'soldi-pin'
 const SKIP = 'soldi-pin-skip'
 const LOCK_AFTER = 'soldi-lock-after'
 
-async function sha(text: string) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
-  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('')
-}
+import { sha256 as sha } from '../lib/sha256'
 
+export const PIN_LEN = 4
 export const hasPin = () => !!localStorage.getItem(KEY)
+/** Lunghezza del PIN salvato: i PIN creati prima dell'aggiornamento erano di 5 cifre. */
+export function pinLength() {
+  try { return (JSON.parse(localStorage.getItem(KEY) ?? '{}').len as number) || 5 } catch { return 5 }
+}
 export const pinSkipped = () => localStorage.getItem(SKIP) === '1'
 export const skipPin = () => localStorage.setItem(SKIP, '1')
 
 export async function setPin(pin: string) {
   const salt = crypto.getRandomValues(new Uint32Array(4)).join('-')
-  localStorage.setItem(KEY, JSON.stringify({ salt, hash: await sha(salt + pin) }))
+  localStorage.setItem(KEY, JSON.stringify({ salt, hash: await sha(salt + pin), len: pin.length }))
   localStorage.removeItem(SKIP)
 }
 export function clearPin() { localStorage.removeItem(KEY); localStorage.setItem(SKIP, '1') }

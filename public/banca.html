@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Soldi · ritorno dalla banca</title>
+  <style>
+    body { margin: 0; min-height: 100dvh; display: grid; place-items: center; background: #0f4d3a; color: #e9f2ed; font: 17px/1.5 -apple-system, system-ui, sans-serif; text-align: center; padding: 24px; box-sizing: border-box; }
+    a { display: inline-block; margin-top: 20px; padding: 14px 28px; border-radius: 999px; background: #e9f2ed; color: #0f4d3a; font-weight: 600; text-decoration: none; }
+    p { opacity: .8; max-width: 320px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Torna a Soldi</h1>
+    <p>La banca ha risposto. Apri l'app per completare il collegamento.</p>
+    <a id="open" href="soldi://banca">Apri Soldi</a>
+  </main>
+  <script>
+    // Passa code e state all'app iOS tramite lo schema soldi://
+    var url = 'soldi://banca' + location.search
+    document.getElementById('open').href = url
+    location.replace(url)
+  </script>
+</body>
+</html>
