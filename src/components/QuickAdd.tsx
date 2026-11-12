@@ -148,7 +148,7 @@ function QuickAddSheet({ prefill, editing, onClose }: { prefill?: Prefill; editi
     const oldIds = editing ? (editing.transfer_group ? pair.map((t) => t.id) : [editing.id]) : []
     const rollback = applyLocal(oldIds, rows)
     localStorage.setItem(LAST_ACC, accountId)
-    haptic()
+    haptic('success')
     // Categoria cambiata a mano: propongo di ricordarla per quell'esercente
     const changedCat = editing && mode !== 'transfer' && categoryId && categoryId !== editing.category_id && ruleKeyFor(rows[0].description).length >= 3
     const key = changedCat ? ruleKeyFor(rows[0].description) : ''
@@ -184,7 +184,7 @@ function QuickAddSheet({ prefill, editing, onClose }: { prefill?: Prefill; editi
     const rows = editing.transfer_group ? pair : [editing]
     const ids = rows.map((t) => t.id)
     const rollback = applyLocal(ids, [])
-    haptic()
+    haptic('warning')
     onClose()
     const { error } = await supabase.from('transactions').delete().in('id', ids)
     if (error) { rollback(); return toast('Eliminazione non riuscita', { tone: 'err' }) }
@@ -227,7 +227,7 @@ function QuickAddSheet({ prefill, editing, onClose }: { prefill?: Prefill; editi
           <input ref={amountRef} inputMode="decimal" value={amountStr} placeholder="0,00"
             onChange={(e) => setAmountStr(e.target.value.replace(/[^0-9,.]/g, ''))}
             onKeyDown={(e) => e.key === 'Enter' && save()}
-            className={`num w-full bg-transparent text-5xl font-semibold tracking-[-0.03em] outline-none placeholder:text-faint ${mode === 'income' ? 'text-pos' : ''}`} />
+            className={`num w-full bg-transparent text-5xl font-semibold tracking-[-0.03em] outline-none focus-visible:outline-none placeholder:text-faint ${mode === 'income' ? 'text-pos' : ''}`} />
         </div>
       </label>
 

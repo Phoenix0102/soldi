@@ -85,12 +85,16 @@ export interface Recurring {
   active: boolean
 }
 
+export type RuleAction = 'category' | 'transfer' | 'debt'
 export interface Rule {
   id: string
   pattern: string
   category_id: string | null
   rename_to: string | null
   priority: number
+  /** category: assegna la categoria · transfer: giroconto · debt: rata verso target_account_id */
+  action: RuleAction
+  target_account_id: string | null
 }
 
 export interface ImportProfile {

@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { isNative } from './native'
+import { navigateTo } from './navigate'
 
 const KEY = import.meta.env.VITE_VAPID_PUBLIC as string
 
@@ -46,7 +47,7 @@ export async function listenNativeTaps() {
   const P = await pushPlugin()
   P.addListener('pushNotificationActionPerformed', ({ notification }) => {
     const url = (notification.data as { url?: string } | undefined)?.url
-    if (url) location.hash = `#${url}`
+    if (url) navigateTo(url)
   })
 }
 

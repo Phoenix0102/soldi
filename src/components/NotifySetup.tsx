@@ -123,12 +123,12 @@ function ApnsKey() {
         scarica il file .p8 e inserisci qui i dati (puoi farlo anche dal computer). Il Team ID è in alto a destra nella pagina Membership.
       </p>
       <div className="grid grid-cols-2 gap-2">
-        <input className="field" placeholder="Key ID" value={keyId} onChange={(e) => setKeyId(e.target.value)} autoCapitalize="characters" />
-        <input className="field" placeholder="Team ID" value={teamId} onChange={(e) => setTeamId(e.target.value)} autoCapitalize="characters" />
+        <input className="field !bg-surface" placeholder="Key ID" value={keyId} onChange={(e) => setKeyId(e.target.value)} autoCapitalize="characters" />
+        <input className="field !bg-surface" placeholder="Team ID" value={teamId} onChange={(e) => setTeamId(e.target.value)} autoCapitalize="characters" />
       </div>
       <input ref={file} type="file" className="hidden" onChange={async (e) => { const f = e.target.files?.[0]; if (f) setP8(await f.text()) }} />
       <div className="flex flex-wrap gap-2">
-        <button className="btn btn-ghost" onClick={() => file.current?.click()}>{p8 ? 'File .p8 caricato' : 'Scegli il file .p8'}</button>
+        <button className="btn btn-ghost !bg-surface" onClick={() => file.current?.click()}>{p8 ? 'File .p8 caricato' : 'Scegli il file .p8'}</button>
         <button className="btn btn-primary" disabled={busy || !keyId || !teamId || !p8} onClick={save}>{busy ? 'Verifica…' : 'Salva'}</button>
         {st.configured && <button className="btn btn-ghost" onClick={() => setOpen(false)}>Annulla</button>}
       </div>

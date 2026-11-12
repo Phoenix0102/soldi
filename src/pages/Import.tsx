@@ -9,10 +9,13 @@ import type { TxKind } from '../lib/types'
 import { AccountChips } from '../components/QuickAdd'
 import { Link } from '../components/nav'
 import { Label, PageHeader, useToast } from '../components/ui'
+import { BackButton } from '../components/back'
 
 interface Row {
   key: string; date: string; amount: number; description: string; balance: number | null
   category_id: string | null; kind: TxKind; include: boolean; dup: 'exact' | 'maybe' | null; hash: string; touched?: boolean
+  /** Conto debito da ridurre (regola "rata") */
+  debt?: string | null
 }
 
 const TRANSFER_HINT = /(giroconto|ricarica|top.?up|trasferimento tra|bonifico a (me|mio)|own account|to pocket|da pocket|exchange|cambio valuta)/i
@@ -58,8 +61,8 @@ export default function Import() {
       seen.set(k, n + 1)
       const hash = await hashRow(accountId, r, n)
       const lower = r.description.toLowerCase()
-      const isTransfer = TRANSFER_HINT.test(r.description) || otherInstitutions.some((i) => lower.includes(i))
       const ruled = applyRules(r.description, rules, categories, r.amount)
+      const isTransfer = ruled?.action === 'transfer' || ruled?.action === 'debt' || (!ruled && (TRANSFER_HINT.test(r.description) || otherInstitutions.some((i) => lower.includes(i))))
       const category_id = isTransfer ? null : ruled?.category_id ?? suggestFromHistory(r.description, txs)
       const exact = existing.has(hash)
       const maybe = !exact && manual.some((t) => Math.abs(t.amount - r.amount) < 0.01 && Math.abs(+new Date(t.date) - +new Date(r.date)) <= 3 * 86400000)
@@ -67,6 +70,7 @@ export default function Import() {
         key: hash, hash, date: r.date, amount: r.amount, description: ruled?.rename_to || r.description || '(senza descrizione)', balance: r.balance,
         category_id, kind: isTransfer ? 'transfer' : r.amount > 0 ? 'income' : 'expense',
         include: !exact && !maybe, dup: exact ? 'exact' : maybe ? 'maybe' : null,
+        debt: ruled?.action === 'debt' ? ruled.target_account_id : null,
       })
     }
     setRows(out.sort((a, b) => b.date.localeCompare(a.date)))
@@ -102,9 +106,18 @@ export default function Import() {
       const payload = sel.map((r) => ({
         account_id: accountId, date: r.date, amount: r.amount, description: r.description,
         category_id: r.kind === 'transfer' ? null : r.category_id, kind: r.kind, source: 'csv', import_hash: r.hash,
+        transfer_group: r.debt && r.kind === 'transfer' ? crypto.randomUUID() : null,
       }))
       for (let i = 0; i < payload.length; i += 500) {
         const { error } = await supabase.from('transactions').upsert(payload.slice(i, i + 500), { onConflict: 'user_id,import_hash', ignoreDuplicates: true })
+        if (error) throw error
+      }
+      // Rate: la contropartita sul conto del debito
+      const counters = sel.flatMap((r, i) => r.debt && payload[i].transfer_group ? [{
+        account_id: r.debt, date: r.date, amount: -r.amount, description: r.description, kind: 'transfer', transfer_group: payload[i].transfer_group, source: 'csv',
+      }] : [])
+      if (counters.length) {
+        const { error } = await supabase.from('transactions').insert(counters)
         if (error) throw error
       }
       await supabase.from('import_profiles').upsert({ account_id: accountId, name: account?.name ?? 'Profilo', mapping: map }, { onConflict: 'user_id,account_id' })
@@ -147,6 +160,7 @@ export default function Import() {
 
   return (
     <div>
+      <BackButton label="Movimenti" fallback="/movimenti" />
       <PageHeader title="Importa estratto conto" subtitle="CSV o Excel scaricato dall'home banking. I doppioni vengono riconosciuti e scartati." />
 
       {done && (

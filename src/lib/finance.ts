@@ -85,6 +85,35 @@ export function networthHistory(accounts: Account[], txs: Transaction[], snaps: 
   return out
 }
 
+export type Period = '3m' | '6m' | '1y' | 'all'
+
+/** Serie del patrimonio per il grafico: settimanale sui periodi brevi, mensile su quelli lunghi. */
+export function networthSeries(accounts: Account[], txs: Transaction[], snaps: Snapshot[], period: Period) {
+  const active = accounts.filter((a) => !a.archived && a.include_in_networth)
+  const today = new Date()
+  const first = txs.length ? parseISO(txs[txs.length - 1].date) : subMonths(today, 12)
+  const months = period === '3m' ? 3 : period === '6m' ? 6 : period === '1y' ? 12 : Math.max(3, differenceInCalendarMonths(today, first) + 1)
+  const start = subMonths(today, months)
+  const weekly = period === '3m'
+  const days: Date[] = []
+  if (weekly) {
+    for (let d = start; d < today; d = addWeeks(d, 1)) days.push(d)
+  } else {
+    for (let i = months - 1; i >= 1; i--) days.push(endOfMonth(subMonths(today, i)))
+  }
+  days.push(today)
+  return days.map((d) => {
+    const day = format(d, 'yyyy-MM-dd')
+    return { date: d, value: round2(active.reduce((s, a) => s + balanceAt(a, day, txs, snaps), 0)) }
+  })
+}
+
+/** Variazione del patrimonio mese per mese (fine mese su fine mese precedente). */
+export function monthlyChanges(accounts: Account[], txs: Transaction[], snaps: Snapshot[], months = 6) {
+  const h = networthHistory(accounts, txs, snaps, months + 1)
+  return h.slice(1).map((p, i) => ({ month: p.month, change: round2(p.value - h[i].value) }))
+}
+
 /* ---------- Ricorrenti ---------- */
 
 export function advance(dateIso: string, f: Frequency) {
@@ -146,9 +175,15 @@ export function applyRules(description: string, rules: Rule[], categories: Categ
   for (const r of sorted) {
     if (!r.pattern) continue
     if (up.includes(r.pattern.toUpperCase())) {
+      const action = r.action ?? 'category'
+      if (action === 'transfer') return { action, category_id: null, target_account_id: null, rename_to: r.rename_to }
+      if (action === 'debt') {
+        if (amount >= 0 || !r.target_account_id) continue
+        return { action, category_id: null, target_account_id: r.target_account_id, rename_to: r.rename_to }
+      }
       const cat = categories.find((c) => c.id === r.category_id)
       if (cat && cat.kind !== wantKind) continue
-      return { category_id: r.category_id, rename_to: r.rename_to }
+      return { action, category_id: r.category_id, target_account_id: null, rename_to: r.rename_to }
     }
   }
   return null
@@ -179,6 +214,11 @@ export function compound(monthly: number, years: number, annualRate: number, ini
     if (i % 12 === 0) series.push({ year: i / 12, value: round2(v), invested: round2(initial + monthly * i) })
   }
   return series
+}
+
+/** Chiave di raggruppamento per lo smistamento: esercente ripulito, o la descrizione se non resta nulla. */
+export function merchantKey(description: string) {
+  return ruleKeyFor(description) || normalizeDesc(description).toUpperCase() || description.trim().toUpperCase() || '(SENZA DESCRIZIONE)'
 }
 
 /** Parola chiave per una regola: il nome dell'esercente ripulito (1 o 2 parole). */

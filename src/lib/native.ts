@@ -26,10 +26,12 @@ export async function initNative() {
   // soldi://banca?code=…&state=… → ricarica l'app con i parametri, li gestisce useBankReturn
   App.addListener('appUrlOpen', ({ url }) => {
     const u = new URL(url)
-    if (u.host === 'banca' || u.pathname.replace(/^\/+/, '') === 'banca') {
+    const path = `/${u.host}${u.pathname}`.replace(/\/+/g, '/').replace(/\/$/, '') || '/'
+    if (path === '/banca') {
       location.href = `/${u.search}#/impostazioni`
-    } else if (u.hash) {
-      location.hash = u.hash
+    } else {
+      // soldi://patrimonio, soldi://movimenti… (widget, comandi rapidi)
+      import('./navigate').then(({ navigateTo }) => navigateTo(path))
     }
   })
 

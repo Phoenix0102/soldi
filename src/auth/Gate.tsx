@@ -40,8 +40,13 @@ export function Gate({ children }: { children: ReactNode }) {
   if (session === undefined) return <Splash />
   if (!session) return <Login onDone={() => { setLocked(false); if (!hasPin() && !pinSkipped()) setNeedsPinSetup(true) }} />
   if (needsPinSetup) return <PinSetup onDone={() => setNeedsPinSetup(false)} />
-  if (locked && hasPin()) return <PinLock onUnlock={() => { last.current = Date.now(); setLocked(false) }} />
-  return <>{children}</>
+  // Il blocco si sovrappone all'app senza smontarla: sbloccando ritrovi tutto dov'era
+  return (
+    <>
+      <div aria-hidden={locked && hasPin()} className={locked && hasPin() ? 'pointer-events-none' : ''}>{children}</div>
+      {locked && hasPin() && <div className="fixed inset-0 z-[80]"><PinLock onUnlock={() => { last.current = Date.now(); setLocked(false) }} /></div>}
+    </>
+  )
 }
 
 function Splash() {

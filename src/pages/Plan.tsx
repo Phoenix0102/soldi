@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useLocation, useSearchParams } from 'react-router-dom'
 import { Plus, Wand2, Check, Pencil, Sparkles } from 'lucide-react'
 import { differenceInCalendarDays, parseISO } from 'date-fns'
 import { useAccounts, useBalances, useBudgets, useCategories, useGoals, useRecurring, useTable, useTransactions, useInvalidate } from '../lib/data'
@@ -13,14 +13,19 @@ import { Bar, Empty, Label, Money, PageHeader, Segmented, Sheet, SkeletonRows, u
 type Tab = 'budget' | 'goals' | 'recurring'
 
 export default function Plan() {
-  const [sp, setSp] = useSearchParams()
-  const tab = (sp.get('tab') as Tab) || 'budget'
+  // La scheda resta montata anche quando sei altrove: la sezione interna è uno stato locale,
+  // che un link come /piano?tab=recurring può impostare
+  const [sp] = useSearchParams()
+  const { pathname } = useLocation()
+  const [tab, setTab] = useState<Tab>((sp.get('tab') as Tab) || 'budget')
+  const want = pathname === '/piano' ? (sp.get('tab') as Tab | null) : null
+  useEffect(() => { if (want) setTab(want) }, [want])
   return (
     <div>
       <PageHeader title="Piano" subtitle="Decidi prima dove vanno i soldi, poi controlla." />
-      <Segmented value={tab} onChange={(t) => setSp({ tab: t })} className="mb-6"
+      <Segmented value={tab} onChange={setTab} className="mb-6"
         options={[{ value: 'budget', label: 'Budget' }, { value: 'goals', label: 'Obiettivi' }, { value: 'recurring', label: 'Ricorrenti' }]} />
-      <div key={tab} className="page-enter">
+      <div key={tab} className="fade-in">
         {tab === 'budget' && <BudgetTab />}
         {tab === 'goals' && <GoalsTab />}
         {tab === 'recurring' && <RecurringTab />}
