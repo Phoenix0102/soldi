@@ -1,0 +1,18 @@
+name: Controllo compilazione iOS (senza firma)
+on:
+  push:
+    branches: [app-ios]
+    paths: ['.github/workflows/ios-check.yml']
+jobs:
+  build:
+    runs-on: macos-15-intel
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci && npm run build:native && npx cap sync ios
+      - name: Compila app e widget senza firma
+        run: |
+          XC=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1); if [ -n "$XC" ]; then sudo xcode-select -s "$XC"; fi
+          xcodebuild build -project ios/App/App.xcodeproj -scheme App -configuration Release -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO -quiet
