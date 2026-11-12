@@ -8,6 +8,12 @@ on:
     branches: [main, app-ios]
     paths-ignore: ['supabase/**', '**.md']
   workflow_dispatch:
+    inputs:
+      runner:
+        description: Mac di GitHub da usare
+        default: macos-15-intel
+        type: choice
+        options: [macos-15-intel, macos-26, macos-15]
 
 concurrency:
   group: ios-${{ github.ref }}
@@ -15,7 +21,8 @@ concurrency:
 
 jobs:
   testflight:
-    runs-on: macos-26
+    # I Mac Apple Silicon gratuiti a volte sono saturi: quelli Intel hanno una coda separata
+    runs-on: ${{ inputs.runner || 'macos-15-intel' }}
     timeout-minutes: 45
     env:
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
@@ -56,6 +63,9 @@ jobs:
           printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8"
           cp "$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8" ~/.appstoreconnect/private_keys/
           /usr/libexec/PlistBuddy -c "Add :teamID string $APPLE_TEAM_ID" ios/ExportOptions.plist
+          # App Store Connect richiede l'SDK di iOS 26: uso l'Xcode 26 più recente installato
+          XC=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$XC" ]; then sudo xcode-select -s "$XC"; fi
           xcodebuild -version
 
       - name: Archivio firmato
