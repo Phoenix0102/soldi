@@ -52,8 +52,9 @@ jobs:
       - name: Chiave API App Store Connect
         if: steps.secrets.outputs.ok == 'true'
         run: |
-          mkdir -p "$RUNNER_TEMP/keys"
+          mkdir -p "$RUNNER_TEMP/keys" ~/.appstoreconnect/private_keys
           printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8"
+          cp "$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8" ~/.appstoreconnect/private_keys/
           /usr/libexec/PlistBuddy -c "Add :teamID string $APPLE_TEAM_ID" ios/ExportOptions.plist
           xcodebuild -version
 
@@ -73,7 +74,7 @@ jobs:
             CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
             -quiet
 
-      - name: Caricamento su TestFlight
+      - name: File .ipa firmato per App Store Connect
         if: steps.secrets.outputs.ok == 'true'
         run: |
           xcodebuild -exportArchive \
@@ -84,9 +85,16 @@ jobs:
             -authenticationKeyPath "$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8" \
             -authenticationKeyID "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+          ls -la "$RUNNER_TEMP/export"
+
+      - name: Caricamento su TestFlight
+        if: steps.secrets.outputs.ok == 'true'
+        run: |
+          xcrun altool --upload-app -t ios -f "$RUNNER_TEMP/export/App.ipa" \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" --output-format normal
           echo "### Build ${{ github.run_number }} caricata su TestFlight" >> "$GITHUB_STEP_SUMMARY"
           echo "Tra 5-15 minuti la trovi nell'app TestFlight sull'iPhone." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Pulizia chiave
         if: always()
-        run: rm -rf "$RUNNER_TEMP/keys"
+        run: rm -rf "$RUNNER_TEMP/keys" ~/.appstoreconnect/private_keys
