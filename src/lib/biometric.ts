@@ -61,3 +61,24 @@ export async function verifyBio() {
     return !!res
   } catch { return false }
 }
+
+export type BioStatus = { available: boolean; type: 'faceid' | 'touchid' | null; problem: 'denied' | 'not-enrolled' | 'lockout' | null }
+
+/** Stato dettagliato: serve a spiegare perché Face ID non è disponibile (permesso negato, non configurato…). */
+export async function bioStatus(): Promise<BioStatus> {
+  if (!isNative()) return { available: await bioAvailable(), type: null, problem: null }
+  try {
+    const r = await (await nativeBio()).isAvailable({ useFallback: false }) as { isAvailable: boolean; biometryType: number; errorCode?: number }
+    const type = r.biometryType === 1 ? 'touchid' : r.biometryType === 2 ? 'faceid' : null
+    if (r.isAvailable) return { available: true, type, problem: null }
+    const problem = r.errorCode === 3 ? 'not-enrolled' : r.errorCode === 2 ? 'lockout' : type ? 'denied' : null
+    return { available: false, type, problem }
+  } catch { return { available: false, type: null, problem: null } }
+}
+
+let inFlight: Promise<boolean> | null = null
+/** Una sola richiesta Face ID alla volta: due richieste insieme si annullano a vicenda. */
+export function verifyBioOnce() {
+  if (!inFlight) inFlight = verifyBio().finally(() => { inFlight = null })
+  return inFlight
+}

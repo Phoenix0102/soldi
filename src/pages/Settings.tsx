@@ -17,7 +17,9 @@ import { BankSetup } from '../components/BankSetup'
 import { useParams } from 'react-router-dom'
 import { BackButton } from '../components/back'
 import { haptic } from '../lib/motion'
-import { bioAvailable, bioEnabled, disableBio, enableBio } from '../lib/biometric'
+import { bioEnabled, bioStatus, disableBio, enableBio, type BioStatus } from '../lib/biometric'
+import { isNative } from '../lib/native'
+import { openAppSettings } from '../lib/widget'
 
 const SECTIONS = [
   { id: 'sicurezza', title: 'Sicurezza', text: 'PIN, Face ID, chiave di accesso', icon: Lock, color: '#0f4d3a' },
@@ -102,9 +104,15 @@ function SecuritySection() {
   const [pinSetup, setPinSetup] = useState(false)
   const [lock, setLock] = useState(lockMinutes())
   const [pwOpen, setPwOpen] = useState(false)
-  const [bioOk, setBioOk] = useState(false)
+  const [bio, setBio] = useState<BioStatus | null>(null)
   const [bioOn, setBioOn] = useState(bioEnabled())
-  useEffect(() => { bioAvailable().then(setBioOk) }, [])
+  useEffect(() => {
+    const check = () => bioStatus().then(setBio)
+    check()
+    // Tornando dalle Impostazioni di iOS ricontrollo il permesso
+    document.addEventListener('visibilitychange', check)
+    return () => document.removeEventListener('visibilitychange', check)
+  }, [])
 
   if (pinSetup) return createPortal(<div className="fixed inset-0 z-[70]"><PinSetup onDone={() => { setPinSetup(false); setPinOn(hasPin()); toast('PIN impostato') }} /></div>, document.body)
 
@@ -124,12 +132,21 @@ function SecuritySection() {
             </select>
           </Row>
         )}
-        {bioOk && pinOn && (
-          <Row icon={<ScanFace size={18} />} title="Face ID" text={bioOn ? 'Sblocchi l\'app senza digitare il PIN' : 'Al posto del PIN, che resta come riserva'}>
-            <button className="btn btn-ghost !py-1.5" onClick={async () => {
-              if (bioOn) { disableBio(); setBioOn(false); toast('Face ID disattivato'); return }
-              try { await enableBio(); setBioOn(true); toast('Face ID attivo') } catch { toast('Attivazione annullata', { tone: 'err' }) }
-            }}>{bioOn ? 'Disattiva' : 'Attiva'}</button>
+        {bio && (bio.available || isNative()) && (
+          <Row icon={<ScanFace size={18} />} title={bio.type === 'touchid' ? 'Touch ID' : 'Face ID'}
+            text={!pinOn ? 'Attiva prima il PIN: Face ID lo sostituisce all\'apertura'
+              : bio.available ? (bioOn ? 'Sblocchi l\'app senza digitare il PIN' : 'Al posto del PIN, che resta come riserva')
+              : bio.problem === 'not-enrolled' ? 'Non è configurato su questo iPhone (Impostazioni › Face ID e codice)'
+              : bio.problem === 'lockout' ? 'Bloccato dopo troppi tentativi: sblocca l\'iPhone con il codice e riprova'
+              : 'Soldi non ha il permesso di usare Face ID'}>
+            {pinOn && (bio.available ? (
+              <button className="btn btn-ghost !py-1.5" onClick={async () => {
+                if (bioOn) { disableBio(); setBioOn(false); toast('Face ID disattivato'); return }
+                try { await enableBio(); setBioOn(true); toast('Face ID attivo') } catch { toast('Attivazione annullata', { tone: 'err' }) }
+              }}>{bioOn ? 'Disattiva' : 'Attiva'}</button>
+            ) : bio.problem !== 'lockout' && (
+              <button className="btn btn-primary !py-1.5" onClick={() => openAppSettings()}>Consenti</button>
+            ))}
           </Row>
         )}
         <Row icon={<KeyRound size={18} />} title="Chiave di accesso" text="Serve per collegare un nuovo dispositivo">
@@ -221,7 +238,7 @@ function Row({ icon, title, text, children }: { icon?: React.ReactNode; title: s
   return (
     <div className="flex flex-wrap items-center gap-4 px-5 py-4">
       {icon && <span className="text-muted">{icon}</span>}
-      <div className="min-w-0 flex-1"><p className="font-medium">{title}</p>{text && <p className="text-sm text-muted">{text}</p>}</div>
+      <div className="min-w-[55%] flex-1"><p className="font-medium">{title}</p>{text && <p className="text-sm text-muted">{text}</p>}</div>
       {children}
     </div>
   )
@@ -288,7 +305,7 @@ function CategoryForm({ cat, kind, onClose }: { cat?: Category; kind: 'expense' 
   return (
     <Sheet open onClose={onClose} title={cat ? 'Modifica categoria' : 'Nuova categoria'}>
       <div className="space-y-4">
-        <div className="flex items-center gap-3"><Badge icon={icon} color={color} size={48} /><input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome" autoFocus /></div>
+        <div className="flex items-center gap-3"><Badge icon={icon} color={color} size={48} /><input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome" /></div>
         {(cat?.kind ?? kind) === 'expense' && (
           <label className="block"><Label>Gruppo</Label>
             <input className="field" list="cat-groups" value={group} onChange={(e) => setGroup(e.target.value)} placeholder="Es. Casa" />

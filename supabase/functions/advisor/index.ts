@@ -18,15 +18,48 @@ const BASE = [
   'Non suggerire titoli o prodotti specifici di un emittente; puoi indicare categorie di strumenti. Se i dati sono incompleti (molti movimenti senza categoria, conti senza saldo) dillo e tienine conto.',
 ].join('\n')
 
-async function claude(apiKey: string, system: string, messages: { role: 'user' | 'assistant'; content: string }[], maxTokens: number) {
+async function call(apiKey: string, payload: Record<string, unknown>) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, system, messages }),
+    body: JSON.stringify({ model: MODEL, ...payload }),
   })
   const body = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(body?.error?.message ?? `Errore API ${res.status}`)
-  return (body.content ?? []).map((c: { text?: string }) => c.text ?? '').join('')
+  return body as { content: { type: string; text?: string; input?: unknown }[]; stop_reason: string }
+}
+
+async function claude(apiKey: string, system: string, messages: { role: 'user' | 'assistant'; content: string }[], maxTokens: number) {
+  const body = await call(apiKey, { max_tokens: maxTokens, system, messages })
+  return body.content.map((c) => c.text ?? '').join('')
+}
+
+// Schema del rapporto: lo strumento obbligatorio garantisce un JSON sempre valido
+const n = (d: string) => ({ type: 'number', description: d })
+const REPORT = {
+  name: 'rapporto',
+  description: 'Rapporto sulla salute finanziaria con piano d\'azione.',
+  input_schema: {
+    type: 'object',
+    required: ['score', 'headline', 'scores', 'strengths', 'risks', 'actions', 'plan', 'outlook'],
+    properties: {
+      score: n('Salute finanziaria complessiva 0-100'),
+      headline: { type: 'string', description: 'Una frase che riassume la situazione' },
+      scores: { type: 'object', required: ['risparmio', 'emergenza', 'debiti', 'investimenti', 'spese'], properties: {
+        risparmio: n('0-100'), emergenza: n('0-100'), debiti: n('0-100'), investimenti: n('0-100'), spese: n('0-100'),
+      } },
+      strengths: { type: 'array', items: { type: 'string' }, description: '2-3 punti forti con numeri, frasi brevi' },
+      risks: { type: 'array', items: { type: 'string' }, description: '2-3 rischi con numeri, frasi brevi' },
+      actions: { type: 'array', description: '4-6 azioni in ordine di priorità', items: { type: 'object', required: ['title', 'detail', 'impact'], properties: {
+        title: { type: 'string' }, detail: { type: 'string', description: '1-2 frasi con cifre' },
+        impact: { type: 'string', enum: ['alto', 'medio', 'basso'] }, monthly: { type: ['number', 'null'], description: 'Euro al mese liberati o da accantonare' },
+      } } },
+      plan: { type: 'object', required: ['emergenza', 'risparmioMensile', 'investimentoMensile'], properties: {
+        emergenza: n('Euro consigliati per il fondo emergenza'), risparmioMensile: n('Euro al mese da risparmiare'), investimentoMensile: n('Euro al mese da investire quando il fondo è pieno'),
+      } },
+      outlook: { type: 'string', description: 'Proiezione a 12 mesi se segue il piano, una frase con cifre' },
+    },
+  },
 }
 
 Deno.serve(async (req) => {
@@ -45,23 +78,20 @@ Deno.serve(async (req) => {
   const summary = JSON.stringify(body.summary ?? {})
   try {
     if (body.action === 'analyze') {
-      const system = `${BASE}
-
-Restituisci SOLO un oggetto JSON con questa forma, senza testo prima o dopo:
-{
-  "score": numero 0-100 (salute finanziaria complessiva: fondo emergenza, tasso di risparmio, debiti, diversificazione, controllo delle spese),
-  "headline": "una frase che riassume la situazione",
-  "scores": { "risparmio": 0-100, "emergenza": 0-100, "debiti": 0-100, "investimenti": 0-100, "spese": 0-100 },
-  "strengths": ["2-3 punti forti con numeri"],
-  "risks": ["2-3 rischi o problemi con numeri"],
-  "actions": [ { "title": "azione breve", "detail": "come farla, 1-2 frasi con cifre", "impact": "alto|medio|basso", "monthly": numero di euro al mese liberati o da mettere da parte, oppure null } ] (4-6 azioni in ordine di priorità),
-  "plan": { "emergenza": euro consigliati per il fondo emergenza, "risparmioMensile": euro al mese da risparmiare, "investimentoMensile": euro al mese da investire quando il fondo è pieno },
-  "outlook": "proiezione a 12 mesi se segue il piano, una frase con cifre"
-}`
-      const text = await claude(key, system, [{ role: 'user', content: `Dati:\n${summary}` }], 2500)
-      const m = text.match(/\{[\s\S]*\}/)
-      if (!m) throw new Error('Risposta non valida, riprova')
-      return json({ analysis: JSON.parse(m[0]), at: new Date().toISOString() })
+      // Se la risposta si interrompe (troppo lunga) riprovo una volta chiedendo frasi più corte
+      const ask = (extra: string, max: number) => call(key, {
+        max_tokens: max, system: `${BASE}\n\nAnalizza i dati e compila il rapporto con lo strumento "rapporto". Frasi brevi e concrete.${extra}`,
+        tools: [REPORT], tool_choice: { type: 'tool', name: 'rapporto' },
+        messages: [{ role: 'user', content: `Dati:\n${summary}` }],
+      })
+      const pick = (r: Awaited<ReturnType<typeof call>>) => {
+        const a = r.content.find((c) => c.type === 'tool_use')?.input as Record<string, unknown> | undefined
+        return r.stop_reason !== 'max_tokens' && a && Number.isFinite(Number(a.score)) && Array.isArray(a.actions) ? a : null
+      }
+      let analysis = pick(await ask('', 6000))
+      if (!analysis) analysis = pick(await ask(' Massimo 4 azioni e 2 punti per elenco, ogni frase sotto le 25 parole.', 6000))
+      if (!analysis) throw new Error('Analisi non riuscita, riprova tra poco')
+      return json({ analysis, at: new Date().toISOString() })
     }
 
     if (body.action === 'chat') {

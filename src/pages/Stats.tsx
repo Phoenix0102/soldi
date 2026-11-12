@@ -26,6 +26,7 @@ export default function Stats() {
   const [range, setRange] = useState<Range>('all')
   const [scrub, setScrub] = useState<number | null>(null)
   const [catId, setCatId] = useState<string | null>(null)
+  const [win, setWin] = useState<[number, number] | null>(null)
 
   // Patrimonio a fine di ogni mese, per conto: base di tutti i grafici
   const monthly = useMemo(() => {
@@ -43,12 +44,15 @@ export default function Stats() {
 
   if (isLoading || !accounts) return <SkeletonPage hero />
 
-  const shown = range === '1y' ? monthly.slice(-12) : range === '2y' ? monthly.slice(-24) : monthly
-  const first = shown[0]?.value ?? 0
-  const last = shown[shown.length - 1]?.value ?? 0
-  const sel = scrub !== null ? shown[scrub] : shown[shown.length - 1]
+  // Il periodo è la larghezza della finestra; col dito si scorre in tutta la storia
+  const view = range === '1y' ? 12 : range === '2y' ? 24 : monthly.length
+  const [ws, we] = win ?? [Math.max(0, monthly.length - view), monthly.length - 1]
+  const atEnd = we >= monthly.length - 1
+  const first = monthly[ws]?.value ?? 0
+  const last = monthly[we]?.value ?? 0
+  const sel = scrub !== null ? monthly[scrub] : monthly[we]
   const growth = last - first
-  const months = Math.max(1, shown.length - 1)
+  const months = Math.max(1, we - ws)
   const changes = monthly.slice(1).map((p, i) => ({ month: p.month, change: round2(p.value - monthly[i].value) }))
   const best = [...changes].sort((a, b) => b.change - a.change)[0]
   const worst = [...changes].sort((a, b) => a.change - b.change)[0]
@@ -93,19 +97,19 @@ export default function Stats() {
 
       <NetworthPanel quiet className="pt-6 pb-4">
         <div className="px-6">
-          <p className="text-sm opacity-75 first-letter:uppercase">{scrub !== null ? format(sel.month, 'MMMM yyyy', { locale: it }) : 'Patrimonio netto'}</p>
+          <p className="text-sm opacity-75 first-letter:uppercase">{scrub !== null || !atEnd ? format(sel.month, 'MMMM yyyy', { locale: it }) : 'Patrimonio netto'}</p>
           <p className="mt-1.5 text-[clamp(2.2rem,10vw,3.4rem)] leading-none font-semibold tracking-[-0.04em]">
-            {scrub !== null ? <span className="num">{money(sel.value)}</span> : <CountMoney value={last} />}
+            {scrub !== null || !atEnd ? <span className="num">{money(sel.value)}</span> : <CountMoney value={last} />}
           </p>
           <p className="num mt-2.5 text-sm opacity-85">
             <span className={`mr-1.5 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${growth >= 0 ? 'bg-white/15' : 'bg-[#ffb4ab]/20 text-[#ffd5cf]'}`}>{growth >= 0 ? '▲' : '▼'} {money(Math.abs(growth), true)}</span>
             in {months} {months === 1 ? 'mese' : 'mesi'} · {growth >= 0 ? '+' : '−'}{money(Math.abs(growth / months), true)}/mese
           </p>
         </div>
-        <ScrubChart key={range} data={shown} height={170} onScrub={(i) => { if (i !== null && i !== scrub) haptic('tick'); setScrub(i) }} className="mt-5" />
+        <ScrubChart key={range} data={monthly} view={view} onView={(a, b) => setWin([a, b])} height={170} onScrub={(i) => { if (i !== null && i !== scrub) haptic('tick'); setScrub(i) }} className="mt-5" />
         <div className="mx-auto mt-3 flex w-fit gap-1 rounded-full bg-black/15 p-1">
           {([['1y', '1 anno'], ['2y', '2 anni'], ['all', 'Tutto']] as const).map(([v, l]) => (
-            <button key={v} onClick={() => { haptic('tick'); setRange(v) }} className={`rounded-full px-3.5 py-1 text-xs font-semibold transition-colors ${range === v ? 'bg-note-ink text-note' : 'opacity-75'}`}>{l}</button>
+            <button key={v} onClick={() => { haptic('tick'); setWin(null); setRange(v) }} className={`rounded-full px-3.5 py-1 text-xs font-semibold transition-colors ${range === v ? 'bg-note-ink text-note' : 'opacity-75'}`}>{l}</button>
           ))}
         </div>
       </NetworthPanel>
@@ -121,7 +125,7 @@ export default function Stats() {
       </section>
 
       <Card title="Com'è cambiata la composizione" sub="Liquidità, risparmi e investimenti sopra lo zero, debiti sotto. Scorri col dito sul grafico.">
-        <StackedArea data={shown.map((p) => ({ label: mLabel(p.month), parts: p.parts }))} labels={GROUPS.map((g) => g.title)} colors={['var(--brand)', 'var(--c-in)', 'var(--gold)', 'var(--neg)']} />
+        <StackedArea data={monthly.slice(ws, we + 1).map((p) => ({ label: mLabel(p.month), parts: p.parts }))} labels={GROUPS.map((g) => g.title)} colors={['var(--brand)', 'var(--c-in)', 'var(--gold)', 'var(--neg)']} />
       </Card>
 
       <Card title="Variazione mese per mese" sub="Quanto è cresciuto (o sceso) il patrimonio ogni mese.">

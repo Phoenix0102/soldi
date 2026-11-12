@@ -7,7 +7,10 @@ type WidgetData = {
   budgetSpent: number; budgetTotal: number; month: string; updatedAt: string
 }
 
-const Bridge = registerPlugin<{ update(o: { json: string }): Promise<void> }>('WidgetBridge')
+const Bridge = registerPlugin<{ update(o: { json: string }): Promise<void>; openSettings(): Promise<void> }>('WidgetBridge')
+
+/** Apre le impostazioni di Soldi nell'app Impostazioni di iOS (permessi Face ID, notifiche). */
+export const openAppSettings = () => (isNative() ? Bridge.openSettings().catch(() => {}) : Promise.resolve())
 let last = ''
 
 export function updateWidget(d: Omit<WidgetData, 'updatedAt'>) {

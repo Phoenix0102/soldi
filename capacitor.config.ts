@@ -9,6 +9,8 @@ const config: CapacitorConfig = {
     scheme: 'Soldi',
     contentInset: 'never',
     limitsNavigationsToAppBoundDomains: false,
+    // Niente anteprime dei link tenendo premuto: è un'app, non un sito
+    allowsLinkPreview: false,
   },
   plugins: {
     SplashScreen: { launchAutoHide: false, backgroundColor: '#0F4D3A', showSpinner: false },

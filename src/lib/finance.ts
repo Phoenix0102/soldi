@@ -108,6 +108,31 @@ export function networthSeries(accounts: Account[], txs: Transaction[], snaps: S
   })
 }
 
+/**
+ * Tutta la storia del patrimonio (almeno 12 mesi), a settimane o a fine mese: il grafico
+ * ne mostra una finestra e col dito si torna indietro nel tempo.
+ */
+export function networthFull(accounts: Account[], txs: Transaction[], snaps: Snapshot[], weekly: boolean) {
+  const active = accounts.filter((a) => !a.archived && a.include_in_networth)
+  const today = new Date()
+  const firstTx = txs.length ? parseISO(txs[txs.length - 1].date) : today
+  const firstSnap = snaps.length ? parseISO(snaps.reduce((m, s) => (s.date < m ? s.date : m), snaps[0].date)) : today
+  const first = firstTx < firstSnap ? firstTx : firstSnap
+  const months = Math.min(120, Math.max(12, differenceInCalendarMonths(today, first) + 1))
+  const days: Date[] = []
+  if (weekly) {
+    const start = subMonths(today, months)
+    for (let d = start; d < today; d = addWeeks(d, 1)) days.push(d)
+  } else {
+    for (let i = months - 1; i >= 1; i--) days.push(endOfMonth(subMonths(today, i)))
+  }
+  days.push(today)
+  return days.map((d) => {
+    const day = format(d, 'yyyy-MM-dd')
+    return { date: d, value: round2(active.reduce((s, a) => s + balanceAt(a, day, txs, snaps), 0)) }
+  })
+}
+
 /** Variazione del patrimonio mese per mese (fine mese su fine mese precedente). */
 export function monthlyChanges(accounts: Account[], txs: Transaction[], snaps: Snapshot[], months = 6) {
   const h = networthHistory(accounts, txs, snaps, months + 1)

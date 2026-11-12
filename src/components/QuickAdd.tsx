@@ -79,7 +79,6 @@ function QuickAddSheet({ prefill, editing, onClose }: { prefill?: Prefill; editi
   const amountRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { if (!accountId && active[0]) setAccountId(active[0].id) }, [active, accountId])
-  useEffect(() => { setTimeout(() => amountRef.current?.focus(), 250) }, [])
 
   // Categorie ordinate per frequenza d'uso
   const cats = useMemo(() => {
@@ -240,7 +239,7 @@ function QuickAddSheet({ prefill, editing, onClose }: { prefill?: Prefill; editi
   return (
     <Sheet open onClose={onClose} title={editing ? 'Modifica movimento' : 'Nuovo movimento'}>
       <div className="flex items-center justify-between gap-3">
-        <Segmented value={mode} onChange={(m) => { setMode(m); if (!editing) { setCategoryId(null); setCatTouched(false) } if (!amountStr) amountRef.current?.focus() }}
+        <Segmented value={mode} onChange={(m) => { setMode(m); if (!editing) { setCategoryId(null); setCatTouched(false) } }}
           options={[{ value: 'expense', label: 'Uscita' }, { value: 'income', label: 'Entrata' }, { value: 'transfer', label: 'Giroconto' }]} />
         {!editing && (
           <>

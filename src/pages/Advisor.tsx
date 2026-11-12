@@ -50,15 +50,22 @@ export default function Advisor() {
   const ai = useQuery({ queryKey: ['ai-status'], queryFn: () => aiConfigured().then((configured) => ({ configured })), staleTime: 5 * 60_000 })
   const [cached, setCached] = useState<{ analysis: Analysis; at: string } | null>(() => { try { return JSON.parse(localStorage.getItem(CACHE) ?? 'null') } catch { return null } })
   const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState<string | null>(null)
+  const running = useRef(false)
+  const alive = useRef(true)
+  useEffect(() => () => { alive.current = false }, [])
 
   const analyze = async () => {
-    if (!summary) return
-    setBusy(true)
+    if (!summary || running.current) return
+    running.current = true; setBusy(true); setFailed(null)
     try {
       const r = await callFn<{ analysis: Analysis; at: string }>('advisor', { action: 'analyze', summary })
-      setCached(r); localStorage.setItem(CACHE, JSON.stringify(r)); haptic('success')
-    } catch (e) { toast((e as Error).message, { tone: 'err' }) }
-    finally { setBusy(false) }
+      localStorage.setItem(CACHE, JSON.stringify(r))
+      if (alive.current) { setCached(r); haptic('success') }
+    } catch (e) {
+      // Se nel frattempo sei uscito dalla pagina non mostro l'errore altrove
+      if (alive.current) { setFailed((e as Error).message); if (cached) toast((e as Error).message, { tone: 'err' }) }
+    } finally { running.current = false; if (alive.current) setBusy(false) }
   }
   // Prima apertura (o analisi più vecchia di 7 giorni): la preparo da sola
   useEffect(() => {
@@ -82,7 +89,13 @@ export default function Advisor() {
         </div>
       ) : (
         <>
-          {busy && !cached ? <Thinking /> : cached && <Report a={cached.analysis} at={cached.at} busy={busy} onRefresh={analyze} />}
+          {busy && !cached ? <Thinking /> : cached ? <Report a={cached.analysis} at={cached.at} busy={busy} onRefresh={analyze} /> : failed && (
+            <div className="rounded-3xl bg-surface p-6 text-center">
+              <p className="font-semibold">L'analisi non è riuscita</p>
+              <p className="mt-1 text-sm text-muted">{failed}</p>
+              <button onClick={analyze} className="btn btn-primary mt-4"><RefreshCw size={16} /> Riprova</button>
+            </div>
+          )}
           <Chat summary={summary} />
           <p className="mt-6 text-center text-xs text-faint">Suggerimenti generati dall'AI sui tuoi dati: non sono una consulenza finanziaria professionale.</p>
         </>
@@ -128,7 +141,7 @@ function Report({ a, at, busy, onRefresh }: { a: Analysis; at: string; busy: boo
       <section className="relative overflow-hidden rounded-[30px] bg-note p-6 text-note-ink">
         <span aria-hidden className="ai-glow" />
         <div className="relative flex flex-col items-center gap-5 sm:flex-row">
-          <ScoreRing score={a.score} />
+          <ScoreRing score={Math.max(0, Math.min(100, Number(a.score) || 0))} />
           <div className="text-center sm:text-left">
             <p className="text-sm opacity-75">Salute finanziaria</p>
             <p className="mt-1 text-xl leading-snug font-semibold">{a.headline}</p>
@@ -151,8 +164,8 @@ function Report({ a, at, busy, onRefresh }: { a: Analysis; at: string; busy: boo
       </section>
 
       <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Box icon={<CheckCircle2 size={18} className="text-pos" />} title="Cosa fai bene" items={a.strengths} />
-        <Box icon={<AlertTriangle size={18} className="text-gold" />} title="Attenzione a" items={a.risks} />
+        <Box icon={<CheckCircle2 size={18} className="text-pos" />} title="Cosa fai bene" items={a.strengths ?? []} />
+        <Box icon={<AlertTriangle size={18} className="text-gold" />} title="Attenzione a" items={a.risks ?? []} />
       </div>
 
       {a.plan && (
@@ -169,7 +182,7 @@ function Report({ a, at, busy, onRefresh }: { a: Analysis; at: string; busy: boo
       <section className="mt-8">
         <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold"><ShieldCheck size={19} /> Il tuo piano</h2>
         <ol className="space-y-2.5">
-          {a.actions.map((x, i) => (
+          {(a.actions ?? []).map((x, i) => (
             <li key={i} className="rise flex gap-3.5 rounded-3xl bg-surface p-4" style={{ '--i': i } as React.CSSProperties}>
               <span className="num flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand text-sm font-semibold text-brand-ink">{i + 1}</span>
               <div className="min-w-0 flex-1">

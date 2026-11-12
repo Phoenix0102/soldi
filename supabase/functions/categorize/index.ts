@@ -13,15 +13,28 @@ const MODEL = 'claude-haiku-5-5'
 type Item = { key: string; samples: string[]; sign: 'in' | 'out'; count: number; total: number }
 type Cat = { id: string; name: string; kind: 'income' | 'expense' }
 
-async function claude(apiKey: string, system: string, user: string, maxTokens = 4000) {
+async function claude(apiKey: string, system: string, user: string, maxTokens = 4000, extra: Record<string, unknown> = {}) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }] }),
+    body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }], ...extra }),
   })
   const body = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(body?.error?.message ?? `Errore API ${res.status}`)
-  return (body.content ?? []).map((c: { text?: string }) => c.text ?? '').join('')
+  return body as { content: { type: string; text?: string; input?: { risposte?: { chiave: string; categoria: string | null }[] } }[] }
+}
+
+// Risposta strutturata tramite strumento obbligatorio: sempre un JSON valido
+const TOOL = {
+  name: 'categorie',
+  description: 'Categoria scelta per ogni gruppo di movimenti.',
+  input_schema: {
+    type: 'object', required: ['risposte'],
+    properties: { risposte: { type: 'array', items: { type: 'object', required: ['chiave', 'categoria'], properties: {
+      chiave: { type: 'string', description: 'La chiave del gruppo, identica a quella ricevuta' },
+      categoria: { type: ['string', 'null'], description: 'Id della categoria, "transfer" per i giroconti, null se incerto' },
+    } } } },
+  },
 }
 
 Deno.serve(async (req) => {
@@ -69,12 +82,12 @@ Deno.serve(async (req) => {
         'Per ogni gruppo scegli l\'id di UNA categoria dall\'elenco, rispettando il segno: le uscite vanno su categorie "uscita", le entrate su categorie "entrata".',
         'Usa "transfer" se il movimento è chiaramente un trasferimento tra conti della stessa persona (es. bonifico a sé stesso, ricarica di un proprio conto o carta, "To <nome>" uguale al titolare, cambio valuta).',
         'Usa null se non sei ragionevolmente sicuro: è meglio lasciare un gruppo da smistare a mano che sbagliare.',
-        'Rispondi SOLO con un oggetto JSON {"chiave": "id-o-transfer-o-null", ...} senza testo prima o dopo.',
+        'Rispondi compilando lo strumento "categorie" con una voce per ogni gruppo.',
       ].join('\n')
       const user = `Categorie (id | tipo | nome):\n${catList}\n\nGruppi da categorizzare:\n${itemList}`
-      const text = await claude(key, system, user)
-      const m = text.match(/\{[\s\S]*\}/)
-      const raw = m ? JSON.parse(m[0]) as Record<string, string | null> : {}
+      const r = await claude(key, system, user, 8000, { tools: [TOOL], tool_choice: { type: 'tool', name: 'categorie' } })
+      const list = r.content.find((c) => c.type === 'tool_use')?.input?.risposte ?? []
+      const raw: Record<string, string | null> = Object.fromEntries(list.map((x) => [x.chiave, x.categoria]))
       const valid = new Map(cats.map((c) => [c.id, c]))
       const out: Record<string, string> = {}
       for (const i of items) {

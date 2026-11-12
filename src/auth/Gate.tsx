@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { useQueryClient } from '@tanstack/react-query'
 import { Delete, Eye, EyeOff, ScanFace } from 'lucide-react'
-import { bioAvailable, bioEnabled, enableBio, verifyBio } from '../lib/biometric'
+import { bioAvailable, bioEnabled, enableBio, verifyBioOnce } from '../lib/biometric'
 import { isNative } from '../lib/native'
 import { haptic } from '../lib/motion'
 import { supabase, OWNER_EMAIL } from '../lib/supabase'
@@ -158,21 +158,38 @@ function PinLock({ onUnlock }: { onUnlock: () => void }) {
   const [err, setErr] = useState('')
   const [tries, setTries] = useState(0)
   const [bio, setBio] = useState(false)
-  const tried = useRef(false)
-  const tryBio = async () => { if (await verifyBio()) { haptic('success'); onUnlock() } }
-  // Face ID parte da solo all'apertura; se lo annulli resta il pulsante accanto allo 0
+  const done = useRef(false)
+  const tryBio = async () => {
+    if (done.current) return
+    // iOS annulla Face ID se lo chiedo mentre l'app sta ancora tornando in primo piano
+    if (document.visibilityState !== 'visible') return
+    await new Promise((r) => setTimeout(r, 380))
+    // Se iOS rifiuta subito la richiesta (app non ancora attiva) riprovo: un annullamento
+    // dell'utente richiede più tempo e non viene ripetuto
+    for (let i = 0; i < 3 && !done.current; i++) {
+      const t0 = Date.now()
+      if (await verifyBioOnce()) { done.current = true; haptic('success'); onUnlock(); return }
+      if (Date.now() - t0 > 900 || document.visibilityState !== 'visible') return
+      await new Promise((r) => setTimeout(r, 450))
+    }
+  }
   useEffect(() => {
     if (!bioEnabled()) return
+    let off: (() => void) | undefined
     bioAvailable().then((ok) => {
       setBio(ok)
-      if (ok && !tried.current) { tried.current = true; tryBio() }
+      if (!ok) return
+      tryBio()
+      // A ogni ritorno nell'app (con il blocco ancora attivo) riprova da solo
+      if (isNative()) import('@capacitor/app').then(({ App }) => App.addListener('appStateChange', ({ isActive }) => { if (isActive) tryBio() })).then((h) => { off = () => h.remove() })
     })
+    return () => off?.()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <PinPad title="Bentornato" subtitle={bio ? 'Usa Face ID o inserisci il PIN' : 'Inserisci il PIN'} error={err} length={pinLength()}
       extra={bio ? <button onClick={tryBio} className="pin-key !bg-transparent" aria-label="Sblocca con Face ID"><ScanFace size={30} /></button> : undefined}
       onComplete={async (p) => {
-      if (await checkPin(p)) { haptic('success'); onUnlock() }
+      if (await checkPin(p)) { done.current = true; haptic('success'); onUnlock() }
       else {
         haptic('warning')
         const t = tries + 1

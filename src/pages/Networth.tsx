@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Plus, ChevronRight, Scale, AlertCircle, BarChart3, Sparkles } from 'lucide-react'
 import { Link } from '../components/nav'
 import { useAccounts, useBalances, useSnapshots, useTransactions } from '../lib/data'
-import { monthlyChanges, networth, networthSeries, type Period } from '../lib/finance'
+import { monthlyChanges, networth, networthFull, type Period } from '../lib/finance'
 import { ACCOUNT_TYPES, type AccountType } from '../lib/types'
 import { money, monthLabel, monthShort, percent1 } from '../lib/format'
 import { format } from 'date-fns'
@@ -38,7 +38,11 @@ export default function Networth() {
   const [bal, setBal] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
 
-  const series = useMemo(() => networthSeries(accounts ?? [], txs, snaps, period), [accounts, txs, snaps, period])
+  // Tutta la storia; il periodo decide quanta se ne vede insieme, col dito si va indietro
+  const weekly = period === '3m'
+  const series = useMemo(() => networthFull(accounts ?? [], txs, snaps, weekly), [accounts, txs, snaps, weekly])
+  const view = period === '3m' ? 14 : period === '6m' ? 7 : period === '1y' ? 13 : series.length
+  const [win, setWin] = useState<[number, number] | null>(null)
   const changes = useMemo(() => monthlyChanges(accounts ?? [], txs, snaps, 6), [accounts, txs, snaps])
 
   if (isLoading || !accounts) return <SkeletonPage hero />
@@ -48,8 +52,10 @@ export default function Networth() {
   const bal0 = (id: string) => balances?.get(id)?.balance ?? 0
   const empty = active.filter((a) => !balances?.get(a.id)?.snapshot_date && !txs.some((t) => t.account_id === a.id))
 
-  const first = series[0]?.value ?? 0
-  const shown = scrub !== null ? series[scrub] : series[series.length - 1]
+  const [vs, ve] = win ?? [Math.max(0, series.length - view), series.length - 1]
+  const atEnd = ve >= series.length - 1
+  const first = series[vs]?.value ?? 0
+  const shown = scrub !== null ? series[scrub] : series[ve]
   const diff = (shown?.value ?? nw.total) - first
   const pctChange = first !== 0 ? diff / Math.abs(first) : 0
   const per = PERIODS.find((p) => p.value === period)!
@@ -72,21 +78,23 @@ export default function Networth() {
 
       <NetworthPanel quiet className="pt-6 pb-4">
         <div className="px-6">
-          <p className="text-sm opacity-75 first-letter:uppercase">{scrub !== null ? dateLabel(shown.date, period) : 'Patrimonio netto'}</p>
+          <p className="text-sm opacity-75 first-letter:uppercase">{scrub !== null ? dateLabel(shown.date, period) : atEnd ? 'Patrimonio netto' : `Patrimonio a ${dateLabel(shown.date, 'all').toLowerCase()}`}</p>
           <p className="mt-1.5 text-[clamp(2.3rem,11vw,3.6rem)] leading-none font-semibold tracking-[-0.04em]">
-            {scrub !== null ? <span className="num">{money(shown.value)}</span> : <CountMoney value={nw.total} />}
+            {scrub !== null || !atEnd ? <span className="num">{money(shown.value)}</span> : <CountMoney value={nw.total} />}
           </p>
           <p className="num mt-2.5 text-sm opacity-85">
             <span className={`mr-1.5 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${diff >= 0 ? 'bg-white/15' : 'bg-[#ffb4ab]/20 text-[#ffd5cf]'}`}>
               {diff >= 0 ? '▲' : '▼'} {money(Math.abs(diff), true)}{first !== 0 && ` · ${percent1(Math.abs(pctChange))}`}
             </span>
-            {scrub !== null ? 'rispetto all\'inizio del periodo' : per.since}
+            {scrub !== null ? 'rispetto all\'inizio della finestra' : atEnd ? per.since : `da ${dateLabel(series[vs].date, 'all').toLowerCase()}`}
           </p>
         </div>
-        <ScrubChart key={period} data={series} onScrub={(i) => { if (i !== null && i !== scrub) haptic('tick'); setScrub(i) }} className="mt-5" />
+        <ScrubChart key={period} data={series} view={view} onView={(a, b) => setWin([a, b])}
+          onScrub={(i) => { if (i !== null && i !== scrub) haptic('tick'); setScrub(i) }} className="mt-5" />
+        {view < series.length && <p className="mt-1.5 text-center text-[0.7rem] opacity-60">Scorri il grafico o la barra per tornare indietro nel tempo</p>}
         <div className="mx-auto mt-3 flex w-fit gap-1 rounded-full bg-black/15 p-1" role="tablist" aria-label="Periodo">
           {PERIODS.map((p) => (
-            <button key={p.value} role="tab" aria-selected={period === p.value} onClick={() => { haptic('tick'); setPeriod(p.value) }}
+            <button key={p.value} role="tab" aria-selected={period === p.value} onClick={() => { haptic('tick'); setWin(null); setPeriod(p.value) }}
               className={`rounded-full px-3.5 py-1 text-xs font-semibold transition-colors ${period === p.value ? 'bg-note-ink text-note' : 'opacity-75'}`}>{p.label}</button>
           ))}
         </div>

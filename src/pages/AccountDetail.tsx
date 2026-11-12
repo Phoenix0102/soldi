@@ -36,9 +36,13 @@ export default function AccountDetail() {
   const own = useMemo(() => txs.filter((t) => t.account_id === id), [txs, id])
   const series = useMemo(() => {
     if (!acc) return []
-    return Array.from({ length: 12 }, (_, i) => {
-      const m = subMonths(new Date(), 11 - i)
-      const day = i === 11 ? format(new Date(), 'yyyy-MM-dd') : format(endOfMonth(m), 'yyyy-MM-dd')
+    // Tutta la storia del conto (almeno un anno): se ne vedono 12 mesi, col dito si torna indietro
+    const mine = txs.filter((t) => t.account_id === acc.id)
+    const oldest = mine.length ? mine[mine.length - 1].date : null
+    const n = Math.min(120, Math.max(12, oldest ? (new Date().getFullYear() - +oldest.slice(0, 4)) * 12 + new Date().getMonth() - (+oldest.slice(5, 7) - 1) + 1 : 12))
+    return Array.from({ length: n }, (_, i) => {
+      const m = subMonths(new Date(), n - 1 - i)
+      const day = i === n - 1 ? format(new Date(), 'yyyy-MM-dd') : format(endOfMonth(m), 'yyyy-MM-dd')
       return { month: m, value: balanceAt(acc, day, txs, snaps) }
     })
   }, [acc, txs, snaps])
@@ -73,8 +77,8 @@ export default function AccountDetail() {
       </p>
 
       <div className="mt-5 rounded-3xl bg-surface pt-4 pb-2" style={{ color: acc.color }}>
-        <ScrubChart data={series} height={130} className="mx-4" onScrub={(i) => { if (i !== null && i !== scrub) haptic('tick'); setScrub(i) }} />
-        <p className="mt-1 px-4 text-xs text-faint">Ultimi 12 mesi · tieni premuto e scorri per vedere i valori</p>
+        <ScrubChart data={series} view={12} height={130} className="mx-4" onScrub={(i) => { if (i !== null && i !== scrub) haptic('tick'); setScrub(i) }} />
+        <p className="mt-1 px-4 text-xs text-faint">{series.length > 12 ? 'Tieni premuto per i valori, scorri veloce o usa la barra per andare indietro' : 'Ultimi 12 mesi · tieni premuto e scorri per vedere i valori'}</p>
       </div>
 
       {accSnaps.length > 0 && (

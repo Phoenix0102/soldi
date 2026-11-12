@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useSearchParams } from 'react-router-dom'
-import { Plus, Wand2, Check, Pencil, Sparkles, Repeat, ChevronRight } from 'lucide-react'
+import { Plus, Wand2, Check, Pencil, Sparkles, Repeat, ChevronRight, X } from 'lucide-react'
+import { SwipeDismiss } from '../components/SwipeDismiss'
 import { Link } from '../components/nav'
 import { detectSubscriptions } from '../lib/subscriptions'
 import { differenceInCalendarDays, parseISO } from 'date-fns'
@@ -262,7 +263,7 @@ function Contribute({ goal, onClose }: { goal: Goal; onClose: () => void }) {
   const [v, setV] = useState('')
   return (
     <Sheet open onClose={onClose} title={`Aggiungi a ${goal.name}`}>
-      <input autoFocus inputMode="decimal" className="field num text-2xl" placeholder="0,00" value={v} onChange={(e) => setV(e.target.value)} />
+      <input inputMode="decimal" className="field num text-2xl" placeholder="0,00" value={v} onChange={(e) => setV(e.target.value)} />
       <p className="mt-2 text-sm text-muted">Usa un numero negativo per togliere.</p>
       <button className="btn btn-primary mt-5 w-full py-3.5" onClick={async () => {
         const n = parseAmount(v); if (n === null) return
@@ -344,7 +345,14 @@ function RecurringTab() {
   const invalidate = useInvalidate()
   const toast = useToast()
   const [form, setForm] = useState<Recurring | 'new' | null>(null)
-  const suggestions = useMemo(() => detectRecurring(txs, items ?? []), [txs, items])
+  // Suggerimenti scartati: non tornano più (salvati su questo dispositivo)
+  const [ignored, setIgnored] = useState<Set<string>>(() => { try { return new Set(JSON.parse(localStorage.getItem('soldi-recurring-ignored') ?? '[]') as string[]) } catch { return new Set() } })
+  const ignore = (keys: string[]) => setIgnored((cur) => {
+    const next = new Set([...cur, ...keys])
+    try { localStorage.setItem('soldi-recurring-ignored', JSON.stringify([...next].slice(-300))) } catch { /* ignoro */ }
+    return next
+  })
+  const suggestions = useMemo(() => detectRecurring(txs, items ?? []).filter((s) => !ignored.has(s.key)), [txs, items, ignored])
   if (isLoading || !items) return <SkeletonRows />
   const active = items.filter((r) => r.active)
   const monthlyOut = active.filter((r) => r.kind === 'expense').reduce((s, r) => s + monthlyEquivalent(r), 0)
@@ -382,17 +390,29 @@ function RecurringTab() {
       </section>
 
       {suggestions.length > 0 && (
-        <section className="mt-6 rounded-3xl border border-dashed border-brand/40 p-5">
-          <h3 className="flex items-center gap-2 font-semibold"><Sparkles size={17} /> Sembrano ricorrenti</h3>
-          <p className="text-sm text-muted">Li ho trovati nei tuoi movimenti in almeno 3 mesi diversi.</p>
+        <section className="step-in mt-6 rounded-3xl border border-dashed border-brand/40 p-5">
+          <div className="flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              <h3 className="flex items-center gap-2 font-semibold"><Sparkles size={17} /> Sembrano ricorrenti</h3>
+              <p className="text-sm text-muted">Li ho trovati nei tuoi movimenti in almeno 3 mesi diversi. Scorri a sinistra o tocca la X per scartarli.</p>
+            </div>
+            <button className="icon-btn -mt-1 -mr-2 shrink-0" aria-label="Nascondi tutti i suggerimenti"
+              onClick={() => { ignore(suggestions.map((x) => x.key)); toast('Suggerimenti nascosti') }}><X size={19} /></button>
+          </div>
           <ul className="mt-3 space-y-2">
             {suggestions.map((s) => (
-              <li key={s.key} className="flex items-center justify-between gap-3 rounded-2xl bg-surface px-4 py-3">
-                <span><span className="font-medium">{s.name}</span><span className="block text-sm text-muted">{money(s.amount)} per {s.months} mesi</span></span>
-                <button className="btn btn-ghost !py-1.5" onClick={async () => {
-                  await insert.mutateAsync({ name: s.name, amount: s.amount, kind: 'expense', frequency: 'monthly', account_id: s.last.account_id, category_id: s.last.category_id, next_date: advance(s.last.date, 'monthly'), match_text: s.key })
-                  toast(`${s.name} aggiunto ai ricorrenti`)
-                }}><Plus size={16} /> Aggiungi</button>
+              <li key={s.key} className="overflow-hidden rounded-2xl">
+                <SwipeDismiss label={`Scarta ${s.name}`} onDismiss={() => ignore([s.key])}>
+                  <div className="flex items-center justify-between gap-2 px-4 py-3">
+                    <span className="min-w-0 flex-1"><span className="block truncate font-medium">{s.name}</span><span className="block text-sm text-muted">{money(s.amount)} per {s.months} mesi</span></span>
+                    <button className="btn btn-ghost !py-1.5" onClick={async () => {
+                      await insert.mutateAsync({ name: s.name, amount: s.amount, kind: 'expense', frequency: 'monthly', account_id: s.last.account_id, category_id: s.last.category_id, next_date: advance(s.last.date, 'monthly'), match_text: s.key })
+                      toast(`${s.name} aggiunto ai ricorrenti`)
+                    }}><Plus size={16} /> Aggiungi</button>
+                    <button className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sunken text-muted press" aria-label={`Scarta ${s.name}`}
+                      onClick={() => ignore([s.key])}><X size={15} strokeWidth={2.5} /></button>
+                  </div>
+                </SwipeDismiss>
               </li>
             ))}
           </ul>
@@ -457,7 +477,7 @@ function RecurringForm({ item, onClose }: { item?: Recurring; onClose: () => voi
     <Sheet open onClose={onClose} title={item ? 'Modifica ricorrente' : 'Nuovo ricorrente'}>
       <div className="space-y-4">
         <Segmented value={kind} onChange={setKind} options={[{ value: 'expense', label: 'Uscita' }, { value: 'income', label: 'Entrata' }]} />
-        <label className="block"><Label>Nome</Label><input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Es. Spotify" autoFocus /></label>
+        <label className="block"><Label>Nome</Label><input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Es. Spotify" /></label>
         <div className="grid grid-cols-2 gap-3">
           <label className="block"><Label>Importo</Label><input className="field num" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" /></label>
           <label className="block"><Label>Frequenza</Label>

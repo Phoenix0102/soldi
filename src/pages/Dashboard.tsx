@@ -16,6 +16,7 @@ import { BalanceSheet } from '../components/BalanceSheet'
 import { NetworthSummary } from '../components/NetworthCard'
 import { Bar, CountMoney, Empty, Money, SkeletonPage } from '../components/ui'
 import { useQuickAdd } from '../components/QuickAdd'
+import { SwipeDismiss, dismissedSet, dismissKey } from '../components/SwipeDismiss'
 import { updateWidget } from '../lib/widget'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -30,6 +31,8 @@ export default function Dashboard() {
   const { data: recurring = [] } = useRecurring()
   const qa = useQuickAdd()
   const [balOpen, setBalOpen] = useState(false)
+  const [dismissed, setDismissed] = useState(dismissedSet)
+  const hide = (k: string) => { dismissKey(k); setDismissed(dismissedSet()) }
   const { data: settings, isFetched: settingsReady } = useAppSettings()
   const go = useGo()
   const { isFetched: txReady } = useTransactions()
@@ -90,7 +93,15 @@ export default function Dashboard() {
   const reportMonth = now.getDate() <= 5 ? 'del mese scorso' : 'di questo mese'
   const hikes = detectSubscriptions(txs, categories).filter((x) => x.active && x.hike)
   const forecast = monthEndForecast(nw.liquid, txs, recurring)
-  const todo = (missing.length > 0 ? 1 : 0) + (toSort > 0 ? 1 : 0) + alerts.length + (hikes.length ? 1 : 0)
+  // Ogni avviso ha una chiave legata al suo contenuto: se lo togli torna solo quando cambia qualcosa
+  const kSort = `sort:${toSort}`
+  const kMissing = `missing:${missing.map((a) => a.id).join(',')}`
+  const kHikes = `hike:${hikes.map((h) => `${h.name}${h.amount}`).join(',')}`
+  const showSort = toSort > 0 && !dismissed.has(kSort)
+  const showMissing = missing.length > 0 && !dismissed.has(kMissing)
+  const showHikes = hikes.length > 0 && !dismissed.has(kHikes)
+  const shownAlerts = alerts.filter((a) => !dismissed.has(`alert:${a.text}`))
+  const todo = (showMissing ? 1 : 0) + (showSort ? 1 : 0) + shownAlerts.length + (showHikes ? 1 : 0)
 
   return (
     <div>
@@ -115,8 +126,8 @@ export default function Dashboard() {
         <section className="mt-6">
           <h2 className="mb-2.5 text-lg font-semibold">Da fare</h2>
           <ul className="divide-y divide-line overflow-hidden rounded-3xl bg-surface">
-            {toSort > 0 && (
-              <li>
+            {showSort && (
+              <li><SwipeDismiss onDismiss={() => hide(kSort)}>
                 <Link to="/smista" className="press flex items-center gap-3.5 px-4 py-3.5">
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-brand text-brand-ink"><Sparkles size={19} /></span>
                   <span className="min-w-0 flex-1">
@@ -125,10 +136,10 @@ export default function Dashboard() {
                   </span>
                   <ChevronRight size={18} className="text-faint" />
                 </Link>
-              </li>
+              </SwipeDismiss></li>
             )}
-            {missing.length > 0 && (
-              <li>
+            {showMissing && (
+              <li><SwipeDismiss onDismiss={() => hide(kMissing)}>
                 <button onClick={() => setBalOpen(true)} className="press flex w-full items-center gap-3.5 px-4 py-3.5 text-left">
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gold/15 text-gold"><Scale size={19} /></span>
                   <span className="min-w-0 flex-1">
@@ -137,10 +148,10 @@ export default function Dashboard() {
                   </span>
                   <ChevronRight size={18} className="text-faint" />
                 </button>
-              </li>
+              </SwipeDismiss></li>
             )}
-            {hikes.length > 0 && (
-              <li>
+            {showHikes && (
+              <li><SwipeDismiss onDismiss={() => hide(kHikes)}>
                 <Link to="/abbonamenti" className="press flex items-center gap-3.5 px-4 py-3.5">
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gold/15 text-gold"><TrendingUp size={19} /></span>
                   <span className="min-w-0 flex-1">
@@ -149,15 +160,15 @@ export default function Dashboard() {
                   </span>
                   <ChevronRight size={18} className="text-faint" />
                 </Link>
-              </li>
+              </SwipeDismiss></li>
             )}
-            {alerts.map((a, i) => (
-              <li key={i} className="flex items-start gap-3.5 px-4 py-3.5">
+            {shownAlerts.map((a) => (
+              <li key={a.text}><SwipeDismiss onDismiss={() => hide(`alert:${a.text}`)}><div className="flex items-start gap-3.5 px-4 py-3.5">
                 <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${a.tone === 'info' ? 'bg-sunken text-muted' : 'bg-gold/15 text-gold'}`}>
                   {a.tone === 'info' ? <Info size={19} /> : <AlertTriangle size={19} />}
                 </span>
                 <p className="pt-2 text-sm">{a.text}</p>
-              </li>
+              </div></SwipeDismiss></li>
             ))}
           </ul>
         </section>
