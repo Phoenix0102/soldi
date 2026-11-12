@@ -8,6 +8,9 @@ import { applyTheme } from './lib/theme'
 import { initNative } from './lib/native'
 import { refreshNativeToken } from './lib/push'
 import App from './App'
+import { ensureRandomUUID } from './lib/sha256'
+
+ensureRandomUUID()
 
 applyTheme()
 initNative().then(refreshNativeToken)

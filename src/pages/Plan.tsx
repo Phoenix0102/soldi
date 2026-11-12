@@ -1,56 +1,55 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useSearchParams } from 'react-router-dom'
-import { Plus, Wand2, Check, Pencil, Sparkles, Repeat, ChevronRight, X } from 'lucide-react'
-import { SwipeDismiss } from '../components/SwipeDismiss'
+import { Plus, Wand2, Check, Pencil, Sparkles, Repeat, ChevronRight } from 'lucide-react'
 import { Link } from '../components/nav'
-import { detectSubscriptions } from '../lib/subscriptions'
-import { differenceInCalendarDays, parseISO } from 'date-fns'
-import { useAccounts, useBalances, useBudgets, useCategories, useGoals, useRecurring, useTable, useTransactions, useInvalidate } from '../lib/data'
-import { advance, avgMonthlyExpense, detectRecurring, inMonth, monthlyEquivalent, monthsLeft, spendByCategory, cashflow } from '../lib/finance'
-import { money, parseAmount, round2, shortDate, longDate, todayISO, percent } from '../lib/format'
-import { FREQUENCIES, type Budget, type BudgetKind, type Frequency, type Goal, type Recurring } from '../lib/types'
-import { supabase } from '../lib/supabase'
+import { recurringGroup } from '../lib/subscriptions'
+import { useAccounts, useBalances, useBudgets, useCategories, useGoals, useRecurring, useTable, useTransactions } from '../lib/data'
+import { avgMonthlyExpense, inMonth, monthlyEquivalent, monthsLeft, spendByCategory } from '../lib/finance'
+import { money, parseAmount, round2, longDate, percent } from '../lib/format'
+import type { Budget, BudgetKind, Goal } from '../lib/types'
 import { Badge, COLORS, ICON_NAMES, Icon } from '../components/Icon'
-import { Bar, Empty, Label, Money, PageHeader, Segmented, Sheet, SkeletonRows, useToast } from '../components/ui'
+import { Bar, Empty, Label, PageHeader, Segmented, Sheet, SkeletonRows, useToast } from '../components/ui'
 
-type Tab = 'budget' | 'goals' | 'recurring'
+type Tab = 'budget' | 'goals'
 
 export default function Plan() {
   // La scheda resta montata anche quando sei altrove: la sezione interna è uno stato locale,
   // che un link come /piano?tab=recurring può impostare
   const [sp] = useSearchParams()
   const { pathname } = useLocation()
-  const [tab, setTab] = useState<Tab>((sp.get('tab') as Tab) || 'budget')
-  const want = pathname === '/piano' ? (sp.get('tab') as Tab | null) : null
+  const param = sp.get('tab') as Tab | null
+  const [tab, setTab] = useState<Tab>(param === 'goals' ? 'goals' : 'budget')
+  const want = pathname === '/piano' && (param === 'goals' || param === 'budget') ? param : null
   useEffect(() => { if (want) setTab(want) }, [want])
   return (
     <div>
       <PageHeader title="Piano" subtitle="Decidi prima dove vanno i soldi, poi controlla." />
       <SubscriptionsCard />
       <Segmented value={tab} onChange={setTab} className="mb-6"
-        options={[{ value: 'budget', label: 'Budget' }, { value: 'goals', label: 'Obiettivi' }, { value: 'recurring', label: 'Ricorrenti' }]} />
+        options={[{ value: 'budget', label: 'Budget' }, { value: 'goals', label: 'Obiettivi' }]} />
       <div key={tab} className="fade-in">
         {tab === 'budget' && <BudgetTab />}
         {tab === 'goals' && <GoalsTab />}
-        {tab === 'recurring' && <RecurringTab />}
       </div>
     </div>
   )
 }
 
 function SubscriptionsCard() {
-  const { data: txs = [] } = useTransactions()
+  const { data: items = [] } = useRecurring()
   const { data: categories = [] } = useCategories()
-  const subs = useMemo(() => detectSubscriptions(txs, categories).filter((s) => s.active && s.type === 'subscription'), [txs, categories])
-  if (!subs.length) return null
-  const monthly = subs.reduce((s, x) => s + x.monthly, 0)
-  const hikes = subs.filter((s) => s.hike).length
+  const active = items.filter((r) => r.active)
+  const subs = active.filter((r) => recurringGroup(r, categories.find((c) => c.id === r.category_id)?.name) === 'subscription').length
+  const fixed = active.filter((r) => r.kind === 'expense').length - subs
+  const monthly = active.filter((r) => r.kind === 'expense').reduce((s, r) => s + monthlyEquivalent(r), 0)
   return (
     <Link to="/abbonamenti" className="press mb-5 flex items-center gap-3.5 rounded-3xl bg-surface px-4 py-3.5">
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#a855f7]/15 text-[#a855f7]"><Repeat size={19} /></span>
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#a855f7]/15 text-[#a855f7]"><Repeat size={20} /></span>
       <span className="min-w-0 flex-1">
-        <span className="block font-semibold">Abbonamenti</span>
-        <span className="block truncate text-sm text-muted">{subs.length} attivi · {money(monthly)} al mese{hikes ? ` · ${hikes} aumentati` : ''}</span>
+        <span className="block font-semibold">Abbonamenti e spese fisse</span>
+        <span className="block truncate text-sm text-muted">
+          {active.length ? `${money(monthly)} al mese · ${subs} ${subs === 1 ? 'abbonamento' : 'abbonamenti'}, ${fixed} altre` : 'Aggiungi Netflix, telefono, rate, affitto'}
+        </span>
       </span>
       <ChevronRight size={18} className="text-faint" />
     </Link>
@@ -118,18 +117,18 @@ function BudgetTab() {
   return (
     <div>
       <section className="rounded-3xl bg-surface p-5 sm:p-6">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-sm text-muted">Speso sulle categorie con budget</p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm text-muted">Speso questo mese</p>
             <p className="num mt-1 text-3xl font-semibold tracking-[-0.02em]">{money(totalSpentBudgeted)} <span className="text-lg font-normal text-muted">di {money(totalBudget, true)}</span></p>
           </div>
-          <button onClick={suggest} className="btn btn-ghost"><Wand2 size={17} /> Suggerisci dai miei dati</button>
+          <button onClick={suggest} className="icon-btn shrink-0 !bg-sunken text-brand" aria-label="Suggerisci i budget dai miei dati" title="Suggerisci dai miei dati"><Wand2 size={19} /></button>
         </div>
         <div className="relative mt-4">
           <Bar value={totalSpentBudgeted} max={totalBudget} tone={totalSpentBudgeted > totalBudget ? 'neg' : totalSpentBudgeted / (totalBudget || 1) > monthProgress + 0.1 ? 'warn' : 'brand'} />
           <span className="absolute -top-1 h-4.5 w-0.5 rounded bg-ink/50" style={{ left: `${monthProgress * 100}%` }} title="Oggi" />
         </div>
-        <p className="mt-2 text-xs text-muted">La tacca indica a che punto del mese sei. Se la barra la supera, stai spendendo più in fretta del previsto.</p>
+        <p className="mt-2 text-xs text-muted">La tacca è oggi: se la barra la supera stai spendendo troppo in fretta.</p>
         {flex.length > 0 && (
           <div className="mt-5 rounded-2xl bg-sunken p-4">
             <div className="flex items-baseline justify-between text-sm">
@@ -137,7 +136,7 @@ function BudgetTab() {
               <span className="num"><strong>{money(flexSpent, true)}</strong> <span className="text-muted">/ {money(flexBudget, true)}</span></span>
             </div>
             <div className="mt-2"><Bar value={flexSpent} max={flexBudget} thin tone={flexSpent > flexBudget ? 'neg' : flexSpent > flexBudget * monthProgress + 0.1 * flexBudget ? 'warn' : 'brand'} /></div>
-            <p className="mt-1.5 text-xs text-muted">Conta il totale: se sfori in una categoria flessibile ma risparmi in un'altra, va bene.</p>
+            <p className="mt-1.5 text-xs text-muted">Conta solo il totale di queste categorie.</p>
           </div>
         )}
       </section>
@@ -336,181 +335,3 @@ function GoalForm({ goal, suggested, onClose }: { goal?: Goal; suggested: number
 }
 
 /* ================= RICORRENTI ================= */
-function RecurringTab() {
-  const { data: items, isLoading } = useRecurring()
-  const { data: txs = [] } = useTransactions()
-  const { data: categories = [] } = useCategories()
-  const { data: accounts = [] } = useAccounts()
-  const { insert } = useTable<Recurring & Record<string, unknown>>('recurring')
-  const invalidate = useInvalidate()
-  const toast = useToast()
-  const [form, setForm] = useState<Recurring | 'new' | null>(null)
-  // Suggerimenti scartati: non tornano più (salvati su questo dispositivo)
-  const [ignored, setIgnored] = useState<Set<string>>(() => { try { return new Set(JSON.parse(localStorage.getItem('soldi-recurring-ignored') ?? '[]') as string[]) } catch { return new Set() } })
-  const ignore = (keys: string[]) => setIgnored((cur) => {
-    const next = new Set([...cur, ...keys])
-    try { localStorage.setItem('soldi-recurring-ignored', JSON.stringify([...next].slice(-300))) } catch { /* ignoro */ }
-    return next
-  })
-  const suggestions = useMemo(() => detectRecurring(txs, items ?? []).filter((s) => !ignored.has(s.key)), [txs, items, ignored])
-  if (isLoading || !items) return <SkeletonRows />
-  const active = items.filter((r) => r.active)
-  const monthlyOut = active.filter((r) => r.kind === 'expense').reduce((s, r) => s + monthlyEquivalent(r), 0)
-  const monthlyIn = active.filter((r) => r.kind === 'income').reduce((s, r) => s + monthlyEquivalent(r), 0)
-  const income = cashflow(inMonth(txs, new Date())).income
-  const catMap = new Map(categories.map((c) => [c.id, c]))
-
-  const record = async (r: Recurring) => {
-    const { error } = await supabase.from('transactions').insert({
-      account_id: r.account_id ?? accounts.find((a) => !a.archived)?.id, date: r.next_date <= todayISO() ? r.next_date : todayISO(),
-      amount: r.kind === 'expense' ? -r.amount : r.amount, kind: r.kind, description: r.name, category_id: r.category_id, recurring_id: r.id,
-    })
-    if (error) return toast(`Non riuscito: ${error.message}`, { tone: 'err' })
-    await supabase.from('recurring').update({ next_date: advance(r.next_date, r.frequency) }).eq('id', r.id)
-    invalidate('transactions', 'recurring')
-    toast(`${r.name} registrato, prossimo il ${shortDate(advance(r.next_date, r.frequency))}`)
-  }
-
-  return (
-    <div>
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <div className="col-span-2 rounded-3xl bg-surface p-5 sm:col-span-1">
-          <p className="text-sm text-muted">Spese fisse al mese</p>
-          <p className="num mt-1 text-2xl font-semibold">{money(monthlyOut)}</p>
-          {income > 0 && <p className="mt-0.5 text-xs text-muted">{percent(monthlyOut / income)} delle entrate di questo mese</p>}
-        </div>
-        <div className="rounded-3xl bg-surface p-5">
-          <p className="text-sm text-muted">All'anno</p>
-          <p className="num mt-1 text-2xl font-semibold">{money(monthlyOut * 12, true)}</p>
-        </div>
-        <div className="rounded-3xl bg-surface p-5">
-          <p className="text-sm text-muted">Entrate fisse al mese</p>
-          <p className="num mt-1 text-2xl font-semibold">{money(monthlyIn)}</p>
-        </div>
-      </section>
-
-      {suggestions.length > 0 && (
-        <section className="step-in mt-6 rounded-3xl border border-dashed border-brand/40 p-5">
-          <div className="flex items-start gap-2">
-            <div className="min-w-0 flex-1">
-              <h3 className="flex items-center gap-2 font-semibold"><Sparkles size={17} /> Sembrano ricorrenti</h3>
-              <p className="text-sm text-muted">Li ho trovati nei tuoi movimenti in almeno 3 mesi diversi. Scorri a sinistra o tocca la X per scartarli.</p>
-            </div>
-            <button className="icon-btn -mt-1 -mr-2 shrink-0" aria-label="Nascondi tutti i suggerimenti"
-              onClick={() => { ignore(suggestions.map((x) => x.key)); toast('Suggerimenti nascosti') }}><X size={19} /></button>
-          </div>
-          <ul className="mt-3 space-y-2">
-            {suggestions.map((s) => (
-              <li key={s.key} className="overflow-hidden rounded-2xl">
-                <SwipeDismiss label={`Scarta ${s.name}`} onDismiss={() => ignore([s.key])}>
-                  <div className="flex items-center justify-between gap-2 px-4 py-3">
-                    <span className="min-w-0 flex-1"><span className="block truncate font-medium">{s.name}</span><span className="block text-sm text-muted">{money(s.amount)} per {s.months} mesi</span></span>
-                    <button className="btn btn-ghost !py-1.5" onClick={async () => {
-                      await insert.mutateAsync({ name: s.name, amount: s.amount, kind: 'expense', frequency: 'monthly', account_id: s.last.account_id, category_id: s.last.category_id, next_date: advance(s.last.date, 'monthly'), match_text: s.key })
-                      toast(`${s.name} aggiunto ai ricorrenti`)
-                    }}><Plus size={16} /> Aggiungi</button>
-                    <button className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sunken text-muted press" aria-label={`Scarta ${s.name}`}
-                      onClick={() => ignore([s.key])}><X size={15} strokeWidth={2.5} /></button>
-                  </div>
-                </SwipeDismiss>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <div className="mt-6 mb-3 flex items-center justify-between">
-        <h3 className="font-semibold">Abbonamenti e spese fisse</h3>
-        <button onClick={() => setForm('new')} className="btn btn-primary"><Plus size={18} /> Ricorrente</button>
-      </div>
-      {items.length === 0 ? (
-        <Empty title="Nessuna spesa ricorrente" text="Aggiungi affitto, telefono, palestra, Netflix: vedrai quanto ti costano davvero in un anno." />
-      ) : (
-        <ul className="divide-y divide-line rounded-3xl bg-surface">
-          {items.map((r) => {
-            const c = r.category_id ? catMap.get(r.category_id) : undefined
-            const days = differenceInCalendarDays(parseISO(r.next_date), new Date())
-            return (
-              <li key={r.id} className={`flex items-center gap-3 px-4 py-3.5 ${r.active ? '' : 'opacity-50'}`}>
-                <Badge icon={c?.icon ?? 'repeat'} color={c?.color ?? '#0ea5e9'} size={38} />
-                <button className="min-w-0 flex-1 text-left" onClick={() => setForm(r)}>
-                  <span className="block truncate font-medium">{r.name}</span>
-                  <span className="block text-sm text-muted">
-                    {FREQUENCIES[r.frequency].label}, {days < 0 ? `scaduto il ${shortDate(r.next_date)}` : days === 0 ? 'oggi' : `tra ${days} ${days === 1 ? 'giorno' : 'giorni'}`}
-                  </span>
-                </button>
-                <Money value={r.kind === 'expense' ? -r.amount : r.amount} signed className="font-semibold" />
-                {r.active && days <= 3 && (
-                  <button onClick={() => record(r)} className="btn btn-ghost !px-3 !py-1.5 text-sm" title="Registra il movimento e passa alla prossima scadenza">Registra</button>
-                )}
-              </li>
-            )
-          })}
-        </ul>
-      )}
-      {form && <RecurringForm item={form === 'new' ? undefined : form} onClose={() => setForm(null)} />}
-    </div>
-  )
-}
-
-function RecurringForm({ item, onClose }: { item?: Recurring; onClose: () => void }) {
-  const { data: accounts = [] } = useAccounts()
-  const { data: categories = [] } = useCategories()
-  const { insert, update, remove } = useTable<Recurring & Record<string, unknown>>('recurring')
-  const toast = useToast()
-  const [name, setName] = useState(item?.name ?? '')
-  const [amount, setAmount] = useState(item ? String(item.amount).replace('.', ',') : '')
-  const [kind, setKind] = useState<'expense' | 'income'>(item?.kind ?? 'expense')
-  const [frequency, setFrequency] = useState<Frequency>(item?.frequency ?? 'monthly')
-  const [nextDate, setNextDate] = useState(item?.next_date ?? todayISO())
-  const [accountId, setAccountId] = useState(item?.account_id ?? accounts[0]?.id ?? '')
-  const [categoryId, setCategoryId] = useState(item?.category_id ?? '')
-  const [active, setActive] = useState(item?.active ?? true)
-  const save = async () => {
-    const a = parseAmount(amount)
-    if (!name.trim() || !a) return
-    const row = { name: name.trim(), amount: round2(Math.abs(a)), kind, frequency, next_date: nextDate, account_id: accountId || null, category_id: categoryId || null, active, match_text: item?.match_text ?? name.trim().toLowerCase() }
-    if (item) await update.mutateAsync({ id: item.id, ...row }); else await insert.mutateAsync(row)
-    toast(item ? 'Ricorrente aggiornato' : 'Ricorrente aggiunto'); onClose()
-  }
-  return (
-    <Sheet open onClose={onClose} title={item ? 'Modifica ricorrente' : 'Nuovo ricorrente'}>
-      <div className="space-y-4">
-        <Segmented value={kind} onChange={setKind} options={[{ value: 'expense', label: 'Uscita' }, { value: 'income', label: 'Entrata' }]} />
-        <label className="block"><Label>Nome</Label><input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Es. Spotify" /></label>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block"><Label>Importo</Label><input className="field num" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0,00" /></label>
-          <label className="block"><Label>Frequenza</Label>
-            <select className="field" value={frequency} onChange={(e) => setFrequency(e.target.value as Frequency)}>
-              {Object.entries(FREQUENCIES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-            </select>
-          </label>
-        </div>
-        <label className="block"><Label>Prossima scadenza</Label><input type="date" className="field" value={nextDate} onChange={(e) => setNextDate(e.target.value)} /></label>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block"><Label>Conto</Label>
-            <select className="field" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-              {accounts.filter((a) => !a.archived).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
-          </label>
-          <label className="block"><Label>Categoria</Label>
-            <select className="field" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-              <option value="">Nessuna</option>
-              {categories.filter((c) => c.kind === kind && !c.archived).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </label>
-        </div>
-        {item && (
-          <label className="flex items-center justify-between rounded-2xl bg-sunken p-4">
-            <span className="font-medium">Attivo</span>
-            <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="h-5 w-5 accent-[var(--brand)]" />
-          </label>
-        )}
-        <div className="flex gap-3 pt-2">
-          {item && <button className="btn btn-danger" onClick={async () => { await remove.mutateAsync(item.id); toast('Ricorrente eliminato'); onClose() }}>Elimina</button>}
-          <button className="btn btn-primary flex-1 py-3.5" onClick={save}>{item ? 'Salva' : 'Aggiungi'}</button>
-        </div>
-      </div>
-    </Sheet>
-  )
-}

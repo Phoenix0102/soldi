@@ -5,12 +5,10 @@ import { useAccounts, useApiTokens, useAppSettings, useInvalidate } from '../lib
 import { longDate } from '../lib/format'
 import { Confirm, Label, useToast } from './ui'
 
+import { sha256 } from '../lib/sha256'
+
 export const INGEST_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ingest`
 
-async function sha256(text: string) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
-  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('')
-}
 
 function newToken() {
   const bytes = crypto.getRandomValues(new Uint8Array(24))

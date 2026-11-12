@@ -86,15 +86,15 @@ export default function Networth() {
             <span className={`mr-1.5 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${diff >= 0 ? 'bg-white/15' : 'bg-[#ffb4ab]/20 text-[#ffd5cf]'}`}>
               {diff >= 0 ? '▲' : '▼'} {money(Math.abs(diff), true)}{first !== 0 && ` · ${percent1(Math.abs(pctChange))}`}
             </span>
-            {scrub !== null ? 'rispetto all\'inizio della finestra' : atEnd ? per.since : `da ${dateLabel(series[vs].date, 'all').toLowerCase()}`}
+            {scrub === null && atEnd ? per.since : `da ${dateLabel(series[vs].date, 'all').toLowerCase()}`}
           </p>
         </div>
-        <ScrubChart key={period} data={series} view={view} onView={(a, b) => setWin([a, b])}
-          onScrub={(i) => { if (i !== null && i !== scrub) haptic('tick'); setScrub(i) }} className="mt-5" />
-        {view < series.length && <p className="mt-1.5 text-center text-[0.7rem] opacity-60">Scorri il grafico o la barra per tornare indietro nel tempo</p>}
+        <ScrubChart key={period} data={series} view={view} onView={(a, b) => setWin([a, b])} onScrub={setScrub} className="mt-5"
+          label={(i) => format(series[i].date, weekly ? 'd MMM' : 'MMM yyyy', { locale: it })} />
+        {view < series.length && <p className="mt-1 text-center text-[0.7rem] opacity-60">Trascina la barra per vedere i periodi precedenti</p>}
         <div className="mx-auto mt-3 flex w-fit gap-1 rounded-full bg-black/15 p-1" role="tablist" aria-label="Periodo">
           {PERIODS.map((p) => (
-            <button key={p.value} role="tab" aria-selected={period === p.value} onClick={() => { haptic('tick'); setWin(null); setPeriod(p.value) }}
+            <button key={p.value} role="tab" aria-selected={period === p.value} onClick={() => { haptic('tick'); setWin(null); setScrub(null); setPeriod(p.value) }}
               className={`rounded-full px-3.5 py-1 text-xs font-semibold transition-colors ${period === p.value ? 'bg-note-ink text-note' : 'opacity-75'}`}>{p.label}</button>
           ))}
         </div>

@@ -106,10 +106,11 @@ export default function Stats() {
             in {months} {months === 1 ? 'mese' : 'mesi'} · {growth >= 0 ? '+' : '−'}{money(Math.abs(growth / months), true)}/mese
           </p>
         </div>
-        <ScrubChart key={range} data={monthly} view={view} onView={(a, b) => setWin([a, b])} height={170} onScrub={(i) => { if (i !== null && i !== scrub) haptic('tick'); setScrub(i) }} className="mt-5" />
+        <ScrubChart key={range} data={monthly} view={view} onView={(a, b) => setWin([a, b])} height={170} onScrub={setScrub}
+          label={(i) => format(monthly[i].month, 'MMM yyyy', { locale: it })} className="mt-5" />
         <div className="mx-auto mt-3 flex w-fit gap-1 rounded-full bg-black/15 p-1">
           {([['1y', '1 anno'], ['2y', '2 anni'], ['all', 'Tutto']] as const).map(([v, l]) => (
-            <button key={v} onClick={() => { haptic('tick'); setWin(null); setRange(v) }} className={`rounded-full px-3.5 py-1 text-xs font-semibold transition-colors ${range === v ? 'bg-note-ink text-note' : 'opacity-75'}`}>{l}</button>
+            <button key={v} onClick={() => { haptic('tick'); setWin(null); setScrub(null); setRange(v) }} className={`rounded-full px-3.5 py-1 text-xs font-semibold transition-colors ${range === v ? 'bg-note-ink text-note' : 'opacity-75'}`}>{l}</button>
           ))}
         </div>
       </NetworthPanel>

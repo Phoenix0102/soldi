@@ -201,7 +201,7 @@ function PinLock({ onUnlock }: { onUnlock: () => void }) {
   )
 }
 
-export function PinSetup({ onDone, upgrade }: { onDone: () => void; upgrade?: boolean }) {
+export function PinSetup({ onDone, upgrade, onCancel }: { onDone: () => void; upgrade?: boolean; onCancel?: () => void }) {
   const [first, setFirst] = useState<string | null>(null)
   const [err, setErr] = useState('')
   return (
@@ -213,15 +213,18 @@ export function PinSetup({ onDone, upgrade }: { onDone: () => void; upgrade?: bo
         onComplete={async (p) => {
           if (!first) { setFirst(p); setErr(''); return }
           if (p !== first) { haptic('warning'); setFirst(null); setErr('I due PIN non coincidono. Ricomincia.'); return }
-          await setPin(p)
+          try { await setPin(p) } catch (e) {
+            haptic('warning'); setFirst(null); setErr(`PIN non salvato (${(e as Error).message}). Riprova.`); return
+          }
           haptic('success')
-          // Nell'app attivo subito Face ID: iOS chiede il permesso la prima volta
-          if (isNative() && bioEnabled() && await bioAvailable()) await enableBio().catch(() => {})
+          setFirst(null)
           onDone()
+          // Subito dopo propongo Face ID (iOS chiede il permesso la prima volta), senza bloccare niente
+          if (isNative() && bioEnabled()) setTimeout(() => { bioAvailable().then((ok) => { if (ok) return enableBio() }).catch(() => {}) }, 500)
         }}
       />
-      {!upgrade && <button onClick={() => { skipPin(); onDone() }} className="fixed bottom-8 left-1/2 -translate-x-1/2 text-sm text-note-ink/70 underline underline-offset-4">
-        Non ora
+      {!upgrade && <button onClick={() => { if (onCancel) onCancel(); else { skipPin(); onDone() } }} className="fixed bottom-[calc(2rem+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 text-sm text-note-ink/70 underline underline-offset-4">
+        {onCancel ? 'Annulla' : 'Non ora'}
       </button>}
     </div>
   )

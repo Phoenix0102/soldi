@@ -9,7 +9,7 @@ import { clearPin, hasPin, lockMinutes, setLockMinutes } from '../auth/pin'
 import { PinSetup } from '../auth/Gate'
 import { Link } from '../components/nav'
 import { Badge, COLORS, ICON_NAMES, Icon } from '../components/Icon'
-import { Label, PageHeader, Segmented, Sheet, useToast } from '../components/ui'
+import { Label, PageHeader, Segmented, Sheet, Switch, useToast } from '../components/ui'
 import type { Category, Rule } from '../lib/types'
 import { ApplePaySetup } from '../components/ApplePaySetup'
 import { NotifySetup } from '../components/NotifySetup'
@@ -71,7 +71,7 @@ function SettingsHome() {
           ))}
         </ul>
         <ul className="divide-y divide-line overflow-hidden rounded-3xl bg-surface">
-          {([['/consulente', 'Consulente AI', Sparkles], ['/statistiche', 'Statistiche', BarChart3], ['/abbonamenti', 'Abbonamenti', Repeat], ['/anno', 'Il tuo anno', CalendarHeart]] as const).map(([to, label, I]) => (
+          {([['/consulente', 'Consulente AI', Sparkles], ['/statistiche', 'Statistiche', BarChart3], ['/abbonamenti', 'Spese fisse', Repeat], ['/anno', 'Il tuo anno', CalendarHeart]] as const).map(([to, label, I]) => (
             <li key={to}>
               <Link to={to} className="press flex items-center gap-3.5 px-4 py-3.5">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand"><I size={18} /></span>
@@ -114,46 +114,58 @@ function SecuritySection() {
     return () => document.removeEventListener('visibilitychange', check)
   }, [])
 
-  if (pinSetup) return createPortal(<div className="fixed inset-0 z-[70]"><PinSetup onDone={() => { setPinSetup(false); setPinOn(hasPin()); toast('PIN impostato') }} /></div>, document.body)
+  if (pinSetup) return createPortal(<div className="fixed inset-0 z-[70]"><PinSetup onCancel={() => setPinSetup(false)} onDone={() => { setPinSetup(false); setPinOn(hasPin()); setBioOn(bioEnabled()); if (hasPin()) toast('PIN impostato') }} /></div>, document.body)
+
+  const bioName = bio?.type === 'touchid' ? 'Touch ID' : 'Face ID'
+  const bioText = !bio ? 'Controllo in corso…'
+    : !pinOn ? `Attiva prima il blocco con PIN`
+    : bio.available ? (bioOn ? 'Apri l\'app guardando l\'iPhone' : 'Il PIN resta come riserva')
+    : bio.problem === 'not-enrolled' ? 'Configuralo nelle Impostazioni dell\'iPhone › Face ID e codice'
+    : bio.problem === 'no-passcode' ? 'Imposta un codice sull\'iPhone per usarlo'
+    : bio.problem === 'lockout' ? 'Bloccato dopo troppi tentativi: sblocca l\'iPhone col codice e riprova'
+    : bio.problem === 'denied' ? 'Permesso negato: tocca Consenti e accendi Face ID per Soldi'
+    : `Non disponibile${bio.detail ? ` (${bio.detail})` : ''}`
 
   return (
     <>
+      <p className="mb-2 px-1 text-xs font-semibold tracking-wide text-faint uppercase">Blocco dell'app</p>
       <div className="divide-y divide-line rounded-3xl bg-surface">
-        <Row icon={<Lock size={18} />} title="PIN di sblocco" text={pinOn ? 'Attivo su questo dispositivo' : 'Disattivato: chiunque usi questo dispositivo vede i tuoi dati'}>
-          <div className="flex gap-2">
-            <button className="btn btn-ghost !py-1.5" onClick={() => setPinSetup(true)}>{pinOn ? 'Cambia' : 'Attiva'}</button>
-            {pinOn && <button className="btn btn-ghost !py-1.5" onClick={() => { clearPin(); setPinOn(false); toast('PIN disattivato') }}>Disattiva</button>}
-          </div>
+        <Row icon={<Lock size={18} />} title="Blocco con PIN" text={pinOn ? 'Chiede il PIN quando apri l\'app' : 'Spento: chi prende il telefono vede i tuoi dati'}>
+          <Switch label="Blocco con PIN" checked={pinOn} onChange={(v) => { if (v) setPinSetup(true); else { clearPin(); setPinOn(false); toast('Blocco disattivato') } }} />
         </Row>
+        {(isNative() || bio?.available) && (
+          <Row icon={<ScanFace size={18} />} title={bioName} text={bioText}>
+            {bio && (bio.available || !pinOn ? (
+              <Switch label={bioName} checked={pinOn && bio.available && bioOn} disabled={!pinOn || !bio.available} onChange={async (v) => {
+                if (!v) { disableBio(); setBioOn(false); toast(`${bioName} disattivato`); return }
+                try { await enableBio(); setBioOn(true); toast(`${bioName} attivo`) } catch { toast(`${bioName} non confermato`, { tone: 'err' }) }
+              }} />
+            ) : bio.problem === 'denied' ? (
+              <button className="btn btn-primary !px-3.5 !py-1.5" onClick={() => openAppSettings()}>Consenti</button>
+            ) : bio.problem === 'error' ? (
+              <button className="btn btn-ghost !px-3.5 !py-1.5" onClick={() => { setBio(null); bioStatus().then(setBio) }}>Riprova</button>
+            ) : null)}
+          </Row>
+        )}
         {pinOn && (
-          <Row title="Blocca dopo" text="Minuti di inattività prima di richiedere il PIN">
-            <select className="field !w-auto !py-1.5" value={lock} onChange={(e) => { setLock(+e.target.value); setLockMinutes(+e.target.value) }}>
-              {[1, 2, 5, 10, 30].map((m) => <option key={m} value={m}>{m} min</option>)}
-            </select>
-          </Row>
+          <>
+            <Row title="Blocca dopo" text="Minuti senza usare l'app">
+              <select className="field !w-auto !py-1.5" value={lock} onChange={(e) => { setLock(+e.target.value); setLockMinutes(+e.target.value) }}>
+                {[1, 2, 5, 10, 30].map((m) => <option key={m} value={m}>{m} min</option>)}
+              </select>
+            </Row>
+            <button className="press block w-full px-4 py-3.5 text-left font-medium text-brand" onClick={() => setPinSetup(true)}>Cambia PIN</button>
+          </>
         )}
-        {bio && (bio.available || isNative()) && (
-          <Row icon={<ScanFace size={18} />} title={bio.type === 'touchid' ? 'Touch ID' : 'Face ID'}
-            text={!pinOn ? 'Attiva prima il PIN: Face ID lo sostituisce all\'apertura'
-              : bio.available ? (bioOn ? 'Sblocchi l\'app senza digitare il PIN' : 'Al posto del PIN, che resta come riserva')
-              : bio.problem === 'not-enrolled' ? 'Non è configurato su questo iPhone (Impostazioni › Face ID e codice)'
-              : bio.problem === 'lockout' ? 'Bloccato dopo troppi tentativi: sblocca l\'iPhone con il codice e riprova'
-              : 'Soldi non ha il permesso di usare Face ID'}>
-            {pinOn && (bio.available ? (
-              <button className="btn btn-ghost !py-1.5" onClick={async () => {
-                if (bioOn) { disableBio(); setBioOn(false); toast('Face ID disattivato'); return }
-                try { await enableBio(); setBioOn(true); toast('Face ID attivo') } catch { toast('Attivazione annullata', { tone: 'err' }) }
-              }}>{bioOn ? 'Disattiva' : 'Attiva'}</button>
-            ) : bio.problem !== 'lockout' && (
-              <button className="btn btn-primary !py-1.5" onClick={() => openAppSettings()}>Consenti</button>
-            ))}
-          </Row>
-        )}
+      </div>
+
+      <p className="mt-6 mb-2 px-1 text-xs font-semibold tracking-wide text-faint uppercase">Account</p>
+      <div className="divide-y divide-line rounded-3xl bg-surface">
         <Row icon={<KeyRound size={18} />} title="Chiave di accesso" text="Serve per collegare un nuovo dispositivo">
-          <button className="btn btn-ghost !py-1.5" onClick={() => setPwOpen(true)}>Cambia</button>
+          <button className="btn btn-ghost !px-3.5 !py-1.5" onClick={() => setPwOpen(true)}>Cambia</button>
         </Row>
-        <Row icon={<LogOut size={18} />} title="Esci da questo dispositivo" text="Per rientrare servirà la chiave di accesso">
-          <button className="btn btn-danger !py-1.5" onClick={async () => { await supabase.auth.signOut(); localStorage.removeItem('soldi-pin') }}>Esci</button>
+        <Row icon={<LogOut size={18} />} title="Esci da questo dispositivo" text="Per rientrare servirà la chiave">
+          <button className="btn btn-danger !px-3.5 !py-1.5" onClick={async () => { await supabase.auth.signOut(); localStorage.removeItem('soldi-pin') }}>Esci</button>
         </Row>
       </div>
       {pwOpen && <PasswordSheet onClose={() => setPwOpen(false)} />}
@@ -234,12 +246,12 @@ function Section({ title, text, children, right }: { title: string; text?: strin
   )
 }
 
-function Row({ icon, title, text, children }: { icon?: React.ReactNode; title: string; text?: string; children: React.ReactNode }) {
+function Row({ icon, title, text, children }: { icon?: React.ReactNode; title: string; text?: string; children?: React.ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center gap-4 px-5 py-4">
-      {icon && <span className="text-muted">{icon}</span>}
-      <div className="min-w-[55%] flex-1"><p className="font-medium">{title}</p>{text && <p className="text-sm text-muted">{text}</p>}</div>
-      {children}
+    <div className="flex items-center gap-3.5 px-4 py-3.5">
+      {icon && <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sunken text-muted">{icon}</span>}
+      <div className="min-w-0 flex-1"><p className="font-medium">{title}</p>{text && <p className="text-sm leading-snug text-muted">{text}</p>}</div>
+      {children && <div className="shrink-0">{children}</div>}
     </div>
   )
 }

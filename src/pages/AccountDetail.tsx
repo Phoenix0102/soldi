@@ -5,7 +5,7 @@ import { Pencil, Archive, Trash2, Scale, ArchiveRestore } from 'lucide-react'
 import { endOfMonth, format, subMonths } from 'date-fns'
 import { BackButton } from '../components/back'
 import { ScrubChart } from '../components/NetworthCard'
-import { haptic } from '../lib/motion'
+import { it } from 'date-fns/locale'
 import { useAccounts, useBalances, useCategories, useSnapshots, useTable, useTransactions } from '../lib/data'
 import { balanceAt } from '../lib/finance'
 import { money, monthLabel, longDate } from '../lib/format'
@@ -77,8 +77,8 @@ export default function AccountDetail() {
       </p>
 
       <div className="mt-5 rounded-3xl bg-surface pt-4 pb-2" style={{ color: acc.color }}>
-        <ScrubChart data={series} view={12} height={130} className="mx-4" onScrub={(i) => { if (i !== null && i !== scrub) haptic('tick'); setScrub(i) }} />
-        <p className="mt-1 px-4 text-xs text-faint">{series.length > 12 ? 'Tieni premuto per i valori, scorri veloce o usa la barra per andare indietro' : 'Ultimi 12 mesi · tieni premuto e scorri per vedere i valori'}</p>
+        <ScrubChart data={series} view={12} height={130} className="mx-4" onScrub={setScrub} label={(i) => format(series[i].month, 'MMM yy', { locale: it })} />
+        <p className="mt-1 px-4 text-xs text-faint">{series.length > 12 ? 'Tocca il grafico per i valori, trascina la barra per i mesi precedenti' : 'Tocca o trascina sul grafico per vedere i valori'}</p>
       </div>
 
       {accSnaps.length > 0 && (

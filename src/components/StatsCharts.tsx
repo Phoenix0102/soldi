@@ -15,20 +15,33 @@ function useWidth() {
   return [ref, w] as const
 }
 
-/** Indice del punto sotto il dito, con vibrazione a ogni cambio. */
-function useScrub(n: number) {
+/**
+ * Punto selezionato col dito. `bands`: ogni elemento occupa una fascia (barre); altrimenti punti agli estremi (linee).
+ * La selezione resta dopo aver alzato il dito; toccando di nuovo lo stesso punto si toglie.
+ */
+function useScrub(n: number, bands = false) {
   const [i, setI] = useState<number | null>(null)
-  const pick = (e: React.PointerEvent) => {
+  const cur = useRef<number | null>(null)
+  const g = useRef<{ prev: number | null; moved: boolean } | null>(null)
+  const at = (e: React.PointerEvent) => {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    const x = Math.min(Math.max(0, e.clientX - r.left), r.width)
-    const k = Math.round((x / r.width) * (n - 1))
-    if (k !== i) { haptic('tick'); setI(k) }
+    const x = Math.min(Math.max(0, e.clientX - r.left), r.width - 0.01)
+    return bands ? Math.min(n - 1, Math.floor((x / r.width) * n)) : Math.round((x / r.width) * (n - 1))
   }
+  const set = (k: number | null) => { if (k !== cur.current) { cur.current = k; setI(k); if (k !== null) haptic('tick') } }
   const handlers = {
-    onPointerDown: (e: React.PointerEvent) => { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); pick(e) },
-    onPointerMove: (e: React.PointerEvent) => { if (e.buttons || e.pointerType === 'mouse') pick(e) },
-    onPointerUp: () => setI(null), onPointerCancel: () => setI(null),
-    onPointerLeave: (e: React.PointerEvent) => { if (e.pointerType === 'mouse') setI(null) },
+    onPointerDown: (e: React.PointerEvent) => {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+      g.current = { prev: cur.current, moved: false }
+      set(at(e))
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      if (g.current) { const k = at(e); if (k !== cur.current) { g.current.moved = true; set(k) } }
+      else if (e.pointerType === 'mouse') set(at(e))
+    },
+    onPointerUp: () => { const s = g.current; g.current = null; if (s && !s.moved && s.prev === cur.current) set(null) },
+    onPointerCancel: () => { g.current = null },
+    onPointerLeave: (e: React.PointerEvent) => { if (e.pointerType === 'mouse' && !g.current) set(null) },
   }
   return [i, handlers] as const
 }
@@ -93,7 +106,7 @@ export function Bars({ data, color = 'var(--brand)', height = 150, signed, forma
   data: { label: string; value: number }[]; color?: string; height?: number; signed?: boolean; format?: (v: number) => string
 }) {
   const [ref, w] = useWidth()
-  const [i, h] = useScrub(data.length)
+  const [i, h] = useScrub(data.length, true)
   const max = Math.max(1, ...data.map((d) => Math.abs(d.value)))
   const avg = data.length ? data.reduce((s, d) => s + d.value, 0) / data.length : 0
   const bw = w ? Math.max(4, (w / data.length) * 0.62) : 0

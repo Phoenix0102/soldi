@@ -236,12 +236,12 @@ export function PageHeader({ title, subtitle, right }: { title: string; subtitle
     <div className="compact-wrap lg:hidden" aria-hidden={!compact}>
       <div className={`compact-bar ${compact ? 'is-on' : ''}`}><span className="truncate">{title}</span></div>
     </div>
-    <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
-      <div className="min-w-0">
+    <header className="mb-6 flex items-start justify-between gap-3">
+      <div className="min-w-0 flex-1">
         <h1 ref={ref} className="text-[1.9rem] leading-tight font-semibold tracking-[-0.02em]">{title}</h1>
         {subtitle && <p className="mt-1 text-muted">{subtitle}</p>}
       </div>
-      {right}
+      {right && <div className="shrink-0 pt-1">{right}</div>}
     </header>
     </>
   )
@@ -279,5 +279,16 @@ export function SkeletonRows({ n = 5 }: { n?: number }) {
         <div key={i} className="flex items-center gap-3"><div className="skeleton h-10 w-10 !rounded-full" /><div className="flex-1 space-y-2"><div className="skeleton h-3.5 w-1/2" /><div className="skeleton h-3 w-1/3" /></div><div className="skeleton h-4 w-16" /></div>
       ))}
     </div>
+  )
+}
+
+/** Interruttore stile iOS. */
+export function Switch({ checked, onChange, disabled, label }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; label: string }) {
+  return (
+    <button type="button" role="switch" aria-checked={checked} aria-label={label} disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative h-[31px] w-[51px] shrink-0 rounded-full transition-colors duration-200 disabled:opacity-40 ${checked ? 'bg-pos' : 'bg-line'}`}>
+      <span className={`absolute top-[2px] left-[2px] h-[27px] w-[27px] rounded-full bg-white shadow-[0_2px_6px_rgb(0_0_0/.2)] transition-transform duration-300 [transition-timing-function:var(--ease-spring)] ${checked ? 'translate-x-5' : ''}`} />
+    </button>
   )
 }

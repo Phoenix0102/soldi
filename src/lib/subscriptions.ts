@@ -2,7 +2,7 @@
 import { differenceInCalendarDays, parseISO, subMonths, format } from 'date-fns'
 import { merchantKey, titleCase } from './finance'
 import { round2 } from './format'
-import type { Transaction } from './types'
+import type { Recurring, Transaction } from './types'
 
 export interface Subscription {
   key: string
@@ -84,4 +84,37 @@ export function duplicates(subs: Subscription[]) {
     if (wa.length >= 4 && wa === wb) out.push([a, b])
   }
   return out
+}
+
+/* ---------- Spese fisse dell'utente (tabella recurring): un solo elenco, diviso in tre gruppi ---------- */
+const FIXED = /rat[ae]\b|prestit|mutuo|finanz|credit|repayment|affitto|condomin|assicura|luce|\bgas\b|acqua|enel|hera|acea|bollett|tass|scuola|universit|asilo/i
+
+export type RecurringGroup = 'subscription' | 'fixed' | 'income'
+export const GROUP_LABEL: Record<RecurringGroup, string> = { subscription: 'Abbonamenti', fixed: 'Rate e bollette', income: 'Entrate' }
+
+/** Abbonamento (servizi), spesa fissa (rate, affitto, bollette) o entrata fissa. */
+export function recurringGroup(r: Recurring, categoryName = ''): RecurringGroup {
+  if (r.kind === 'income') return 'income'
+  const text = `${r.name} ${r.match_text ?? ''}`
+  if (FIXED.test(text) || /rat[ae]|prestit|mutuo|affitto|casa|bollett|utenz|assicura/i.test(categoryName)) return 'fixed'
+  if (SERVICES.test(text) || /abbonam|streaming|telefon|internet|app|svago|intratten/i.test(categoryName)) return 'subscription'
+  return r.amount <= 40 ? 'subscription' : 'fixed'
+}
+
+export interface RecurringSuggestion { key: string; name: string; amount: number; cadence: 'monthly' | 'yearly' | 'weekly'; next: string; accountId: string | null; categoryId: string | null; note: string }
+
+/** Addebiti regolari trovati nei movimenti che non sono ancora nell'elenco. */
+export function suggestRecurring(txs: Transaction[], categories: { id: string; name: string }[], existing: Recurring[]): RecurringSuggestion[] {
+  const known = existing.map((r) => (r.match_text || r.name).toLowerCase().trim()).filter(Boolean)
+  const firstWord = (s: string) => s.toLowerCase().split(/\s+/).find((w) => w.length >= 3) ?? s.toLowerCase()
+  const isKnown = (key: string) => {
+    const k = key.toLowerCase()
+    return known.some((m) => k.includes(m) || m.includes(k) || firstWord(m) === firstWord(k))
+  }
+  return detectSubscriptions(txs, categories)
+    .filter((s) => s.active && !isKnown(s.key))
+    .map((s) => ({
+      key: s.key, name: s.name, amount: s.amount, cadence: s.cadence, next: s.next, accountId: s.accounts[0] ?? null, categoryId: s.categoryId,
+      note: `${s.count} addebiti ${s.cadence === 'monthly' ? 'mensili' : s.cadence === 'yearly' ? 'annuali' : 'settimanali'}, l'ultimo il ${s.last.slice(8, 10)}/${s.last.slice(5, 7)}`,
+    }))
 }

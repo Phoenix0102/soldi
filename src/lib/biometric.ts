@@ -6,7 +6,35 @@ import { isNative } from './native'
 const KEY = 'soldi-bio'
 const NATIVE = 'native'
 
+import { registerPlugin } from '@capacitor/core'
+
+type AuthStatus = { available: boolean; type: 'faceid' | 'touchid' | 'none'; problem: string; message: string }
+type AuthResult = { ok: boolean; code: number; message: string }
+// Plugin nativo dell'app (MainViewController.swift); quello esterno resta come riserva
+const SoldiAuth = registerPlugin<{ status(): Promise<AuthStatus>; verify(o: { reason: string }): Promise<AuthResult> }>('SoldiAuth')
 const nativeBio = async () => (await import('@capgo/capacitor-native-biometric')).NativeBiometric
+
+/** Una chiamata nativa che non risponde non deve mai bloccare l'app. */
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`${label}: nessuna risposta`)), ms))])
+}
+
+async function nativeStatus(): Promise<AuthStatus> {
+  try { return await withTimeout(SoldiAuth.status(), 2500, 'SoldiAuth') } catch (e) {
+    // Riserva: libreria esterna
+    const r = await withTimeout((await nativeBio()).isAvailable({ useFallback: false }), 2500, 'NativeBiometric') as { isAvailable: boolean; biometryType: number; errorCode?: number }
+    return { available: r.isAvailable, type: r.biometryType === 1 ? 'touchid' : r.biometryType === 2 ? 'faceid' : 'none', problem: r.isAvailable ? '' : r.errorCode === 3 ? 'not-enrolled' : r.errorCode === 2 ? 'lockout' : 'denied', message: `riserva (${(e as Error).message})` }
+  }
+}
+
+async function nativeVerify(reason: string): Promise<boolean> {
+  try {
+    const r = await SoldiAuth.verify({ reason })
+    return r.ok
+  } catch {
+    try { await (await nativeBio()).verifyIdentity({ reason, useFallback: false }); return true } catch { return false }
+  }
+}
 
 const toB64 = (buf: ArrayBuffer) => btoa(String.fromCharCode(...new Uint8Array(buf)))
 const fromB64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0))
@@ -17,14 +45,14 @@ export const bioEnabled = () => isNative() ? localStorage.getItem(KEY) !== 'off'
 
 export async function bioAvailable() {
   try {
-    if (isNative()) return (await (await nativeBio()).isAvailable({ useFallback: false })).isAvailable
+    if (isNative()) return (await nativeStatus()).available
     return !!window.PublicKeyCredential && (await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable())
   } catch { return false }
 }
 
 export async function enableBio() {
   if (isNative()) {
-    await (await nativeBio()).verifyIdentity({ reason: 'Attiva lo sblocco di Soldi con Face ID', useFallback: false })
+    if (!await nativeVerify('Attiva lo sblocco di Soldi con Face ID')) throw new Error('Face ID non confermato')
     localStorage.setItem(KEY, NATIVE)
     return
   }
@@ -48,10 +76,7 @@ export async function verifyBio() {
   const id = localStorage.getItem(KEY)
   if (isNative()) {
     if (id === 'off') return false
-    try {
-      await (await nativeBio()).verifyIdentity({ reason: 'Sblocca Soldi', useFallback: false })
-      return true
-    } catch { return false }
+    return nativeVerify('Sblocca Soldi')
   }
   if (!id || id === NATIVE) return false
   try {
@@ -62,18 +87,18 @@ export async function verifyBio() {
   } catch { return false }
 }
 
-export type BioStatus = { available: boolean; type: 'faceid' | 'touchid' | null; problem: 'denied' | 'not-enrolled' | 'lockout' | null }
+export type BioStatus = { available: boolean; type: 'faceid' | 'touchid' | null; problem: 'denied' | 'not-enrolled' | 'lockout' | 'no-passcode' | 'error' | null; detail?: string }
 
 /** Stato dettagliato: serve a spiegare perché Face ID non è disponibile (permesso negato, non configurato…). */
 export async function bioStatus(): Promise<BioStatus> {
   if (!isNative()) return { available: await bioAvailable(), type: null, problem: null }
   try {
-    const r = await (await nativeBio()).isAvailable({ useFallback: false }) as { isAvailable: boolean; biometryType: number; errorCode?: number }
-    const type = r.biometryType === 1 ? 'touchid' : r.biometryType === 2 ? 'faceid' : null
-    if (r.isAvailable) return { available: true, type, problem: null }
-    const problem = r.errorCode === 3 ? 'not-enrolled' : r.errorCode === 2 ? 'lockout' : type ? 'denied' : null
-    return { available: false, type, problem }
-  } catch { return { available: false, type: null, problem: null } }
+    const r = await nativeStatus()
+    const type = r.type === 'none' ? null : r.type
+    if (r.available) return { available: true, type, problem: null, detail: r.message || undefined }
+    const problem = (['denied', 'not-enrolled', 'lockout', 'no-passcode'].includes(r.problem) ? r.problem : 'error') as BioStatus['problem']
+    return { available: false, type, problem, detail: r.message }
+  } catch (e) { return { available: false, type: null, problem: 'error', detail: (e as Error).message } }
 }
 
 let inFlight: Promise<boolean> | null = null

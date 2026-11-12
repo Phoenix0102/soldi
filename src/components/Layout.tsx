@@ -466,30 +466,26 @@ function usePullToRefresh(ind: React.RefObject<HTMLDivElement | null>) {
   }, [ind, qc])
 }
 
-/* ---------- Barra in basso ---------- */
-// Colonna (0..4, + al centro) → posizione della lente (0..3, il + non conta)
-const colToP = (c: number) => (c <= 1 ? c : c < 3 ? 1 + (c - 1) / 2 : c - 1)
-
+/* ---------- Barra in basso ----------
+   Stile iOS 26: capsula di vetro con le 4 sezioni e, staccato a destra, il tasto + rotondo
+   (come il tasto Cerca delle app Apple). Una sola "pillola" evidenzia la sezione: segue lo
+   scorrimento tra le schede, si sposta alla pressione e segue il dito se trascini sulla barra. */
 function TabBar({ active, hidden, onTab, onAdd }: { active: number; hidden: boolean; onTab: (i: number) => void; onAdd: () => void }) {
-  const cols = [0, 1, null, 2, 3] as const
   const box = useRef<HTMLDivElement>(null)
-  const drag = useRef<{ id: number; target: number | null; x0: number; moved: boolean } | null>(null)
+  const drag = useRef<{ id: number; target: number; x0: number; moved: boolean } | null>(null)
   const unlock = useRef(0)
   const [press, setPress] = useState<number | null>(null)
+  const N = TABS.length
 
-  // Il dito guida la lente: si sposta già alla pressione e segue il trascinamento sulla barra
-  const place = (x: number) => {
+  const place = (x: number, exact: boolean) => {
     const el = box.current
-    if (!el) return null
+    if (!el) return active
     const r = el.getBoundingClientRect()
-    const col = Math.max(0, Math.min(4, (x - r.left - 7) / ((r.width - 14) / 5) - 0.5))
-    const p = Math.max(0, Math.min(3, colToP(col)))
+    const p = Math.max(0, Math.min(N - 1, (x - r.left - 6) / ((r.width - 12) / N) - 0.5))
     const root = document.documentElement
-    root.style.setProperty('--tab-p', p.toFixed(4))
+    root.style.setProperty('--tab-p', (exact ? Math.round(p) : p).toFixed(4))
     root.style.setProperty('--tab-s', '1')
-    // Sopra il + non si seleziona niente
-    const over = Math.round(col)
-    return over === 2 ? null : over < 2 ? over : over - 1
+    return Math.round(p)
   }
   const release = (i: number) => {
     const root = document.documentElement
@@ -500,11 +496,11 @@ function TabBar({ active, hidden, onTab, onAdd }: { active: number; hidden: bool
     setPress(null)
   }
   const onDown = (e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest('.tabbar-add') || e.button > 0) return
+    if (e.button > 0) return
     const root = document.documentElement
     window.clearTimeout(unlock.current)
     root.dataset.tablock = '1'; root.dataset.tabpress = '1'
-    const t = place(e.clientX)
+    const t = place(e.clientX, true)
     drag.current = { id: e.pointerId, target: t, x0: e.clientX, moved: false }
     setPress(t)
     box.current?.setPointerCapture?.(e.pointerId)
@@ -512,45 +508,41 @@ function TabBar({ active, hidden, onTab, onAdd }: { active: number; hidden: bool
   const onMove = (e: React.PointerEvent) => {
     const d = drag.current
     if (!d || d.id !== e.pointerId) return
-    if (!d.moved && Math.abs(e.clientX - d.x0) < 6) return
+    if (!d.moved && Math.abs(e.clientX - d.x0) < 8) return
     if (!d.moved) { d.moved = true; document.documentElement.dataset.tabdrag = '1' }
-    const t = place(e.clientX)
-    if (t !== d.target) { d.target = t; setPress(t); if (t !== null) haptic('tick') }
+    const t = place(e.clientX, false)
+    if (t !== d.target) { d.target = t; setPress(t); haptic('tick') }
   }
   const onUp = (e: React.PointerEvent) => {
     const d = drag.current
     if (!d || d.id !== e.pointerId) return
     drag.current = null
-    const t = d.target ?? active
-    release(t)
-    if (t !== active) onTab(t)
-    else if (!d.moved) onTab(t) // tocco sulla scheda attuale: torna in cima
+    release(d.target)
+    onTab(d.target)
   }
   const onCancel = () => { if (drag.current) { drag.current = null; release(active) } }
 
   return (
     <nav className={`tabbar no-print ${hidden ? 'is-hidden' : ''}`} aria-label="Navigazione">
-      <div ref={box} className="tabbar-inner" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onCancel}>
-        <span aria-hidden className="tabbar-lens l" />
-        <span aria-hidden className="tabbar-lens r" />
-        {cols.map((i) => i === null ? (
-          <div key="add" className="flex items-center justify-center">
-            <button onClick={onAdd} aria-label="Nuovo movimento" className="tabbar-add"><Plus size={24} strokeWidth={2.4} /></button>
-          </div>
-        ) : (
-          <TabButton key={TABS[i].to} i={i} active={press !== null ? i === press : i === active} pressed={press === i} onTab={onTab} />
-        ))}
+      <div className="tabbar-row">
+        <div ref={box} className="tabbar-inner" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onCancel}>
+          <span aria-hidden className="tabbar-pill" />
+          {TABS.map((t, i) => (
+            <TabButton key={t.to} i={i} active={press !== null ? i === press : i === active} onTab={onTab} />
+          ))}
+        </div>
+        <button onClick={onAdd} aria-label="Nuovo movimento" className="tabbar-fab"><Plus size={26} strokeWidth={2.4} /></button>
       </div>
     </nav>
   )
 }
 
-function TabButton({ i, active, pressed, onTab }: { i: number; active: boolean; pressed: boolean; onTab: (i: number) => void }) {
+function TabButton({ i, active, onTab }: { i: number; active: boolean; onTab: (i: number) => void }) {
   const { label, icon: I } = TABS[i]
   return (
     // Il tocco lo gestisce la barra (pointer); il click resta per tastiera e lettori di schermo
     <button onClick={(e) => { if (e.detail === 0) onTab(i) }} aria-current={active ? 'page' : undefined} aria-label={label}
-      className={`tabbar-btn ${active ? 'is-active' : ''} ${pressed ? 'is-pressed' : ''}`}>
+      className={`tabbar-btn ${active ? 'is-active' : ''}`}>
       <I size={22} strokeWidth={active ? 2.3 : 1.8} />
       <span>{label}</span>
     </button>

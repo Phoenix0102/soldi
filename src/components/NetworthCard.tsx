@@ -124,15 +124,15 @@ export function Sparkline({ data, className = '' }: { data: { value: number }[];
 
 /**
  * Grafico da esplorare col dito.
- * - tieni premuto e scorri: `onScrub` riceve il punto toccato (indice nella serie completa);
- * - colpo rapido a destra/sinistra: la finestra scorre nel tempo con inerzia;
- * - durante lo scrub, vicino ai bordi la finestra avanza da sola;
- * - sotto, una mini mappa di tutta la storia con la finestra da trascinare.
- * `view` = quanti punti si vedono insieme (default: tutti). La scala verticale si adatta con un'animazione.
+ * - tocca o trascina: `onScrub` riceve il punto (indice nella serie completa); la selezione resta
+ *   dopo aver alzato il dito, un altro tocco sullo stesso punto la toglie;
+ * - `view` = quanti punti si vedono insieme; se la storia è più lunga, sotto c'è una mini mappa
+ *   con la finestra da trascinare (o da spostare toccando) per tornare indietro nel tempo.
+ * La scala verticale si adatta alla finestra con un'animazione.
  */
-export function ScrubChart({ data, onScrub, onView, view, height = 150, className = '' }: {
+export function ScrubChart({ data, onScrub, onView, view, height = 150, className = '', label }: {
   data: { value: number }[]; onScrub: (i: number | null) => void; onView?: (start: number, end: number) => void
-  view?: number; height?: number; className?: string
+  view?: number; height?: number; className?: string; label?: (i: number) => string
 }) {
   const [ref, w] = useWidth()
   const n = data.length
@@ -144,11 +144,12 @@ export function ScrubChart({ data, onScrub, onView, view, height = 150, classNam
   const startRef = useRef(start)
   startRef.current = start
   // Nuovi dati o nuova finestra: si riparte dal presente
-  useLayoutEffect(() => { setStart(maxStart) }, [n, span]) // eslint-disable-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => { setStart(maxStart); startRef.current = maxStart }, [n, span]) // eslint-disable-line react-hooks/exhaustive-deps
   const s0 = Math.min(Math.max(0, start), maxStart)
+  const a0 = Math.round(s0), b0 = Math.min(n - 1, Math.round(s0) + span - 1)
   const viewCb = useRef(onView)
   viewCb.current = onView
-  useLayoutEffect(() => { viewCb.current?.(Math.round(s0), Math.min(n - 1, Math.round(s0) + span - 1)) }, [Math.round(s0), span, n]) // eslint-disable-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => { viewCb.current?.(a0, b0) }, [a0, b0])
 
   // Dominio verticale della finestra visibile, raggiunto con una molla leggera
   const target = useMemo(() => {
@@ -182,119 +183,46 @@ export function ScrubChart({ data, onScrub, onView, view, height = 150, classNam
   const pts: [number, number][] = []
   if (w && n > 1) for (let i = a; i <= b; i++) pts.push([xOf(i), yOf(data[i].value)])
   const line = smoothPath(pts)
-  const p = hover !== null && w ? [xOf(hover), yOf(data[hover].value)] as const : null
+  const p = hover !== null && w && hover >= a && hover <= b ? [xOf(hover), yOf(data[hover].value)] as const : null
 
-  // ---- gesti ----
-  const g = useRef<{ id: number; x0: number; y0: number; t0: number; mode: 'wait' | 'scrub' | 'pan'; s: number; lx: number; lt: number; v: number; timer: number } | null>(null)
-  const auto = useRef(0)
-  const inertia = useRef(0)
-  const box = useRef<DOMRect | null>(null)
-  const lastX = useRef(0)
-  const clampS = (v: number) => Math.min(Math.max(0, v), maxStart)
-  const scrubAt = (x: number) => {
-    const r = box.current
-    if (!r || !w) return
-    const rel = Math.min(Math.max(0, x - r.left), r.width)
-    const i = Math.min(n - 1, Math.max(0, Math.round(startRef.current + (rel / r.width) * (span - 1))))
-    if (hoverRef.current !== i) { hoverRef.current = i; setHover(i); onScrub(i) }
-    // Ai bordi la finestra scorre da sola, più veloce quanto più sei vicino
-    const edge = r.width * 0.1
-    const dir = rel < edge && startRef.current > 0 ? -(1 - rel / edge) : rel > r.width - edge && startRef.current < maxStart ? (1 - (r.width - rel) / edge) : 0
-    cancelAnimationFrame(auto.current)
-    if (dir) {
-      const step = () => {
-        const nx = clampS(startRef.current + dir * 0.18)
-        if (nx === startRef.current) return
-        startRef.current = nx
-        setStart(nx)
-        scrubAt(lastX.current)
-      }
-      auto.current = requestAnimationFrame(step)
-    }
+  // ---- tocco ----
+  const g = useRef<{ prev: number | null; moved: boolean } | null>(null)
+  const select = (i: number | null) => {
+    if (hoverRef.current === i) return
+    hoverRef.current = i; setHover(i); onScrub(i)
+    if (i !== null) haptic('tick')
   }
-  const startScrub = (x: number) => {
-    const s = g.current
-    if (!s) return
-    s.mode = 'scrub'
-    scrubAt(x)
+  const at = (e: React.PointerEvent) => {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const rel = Math.min(Math.max(0, e.clientX - r.left), r.width)
+    return Math.min(b0, Math.max(a0, Math.round(startRef.current + (rel / r.width) * (span - 1))))
   }
-  const end = () => {
-    const s = g.current
-    g.current = null
-    cancelAnimationFrame(auto.current)
-    if (s) clearTimeout(s.timer)
-    if (s?.mode === 'pan' && Math.abs(s.v) > 0.002) {
-      // Inerzia: la finestra continua un po' e rallenta
-      let v = s.v
-      const step = () => {
-        v *= 0.93
-        const nx = clampS(startRef.current + v * 16)
-        startRef.current = nx
-        setStart(nx)
-        if (Math.abs(v) > 0.0015 && nx > 0 && nx < maxStart) inertia.current = requestAnimationFrame(step)
-        else settle()
-      }
-      inertia.current = requestAnimationFrame(step)
-    } else if (s?.mode === 'pan') settle()
-    hoverRef.current = null; setHover(null); onScrub(null)
+  // Spostando la finestra la selezione si toglie (il punto potrebbe non essere più visibile)
+  const moveWindow = (v: number) => {
+    const nx = Math.min(Math.max(0, v), maxStart)
+    startRef.current = nx; setStart(nx)
+    if (hoverRef.current !== null) select(null)
   }
-  // A fine movimento la finestra si allinea a un punto intero
-  const settle = () => {
-    const from = startRef.current, to = Math.round(from)
-    if (from === to) return
-    const t0 = performance.now()
-    const step = (t: number) => {
-      const k = Math.min(1, (t - t0) / 220), e = 1 - (1 - k) ** 3
-      const nx = from + (to - from) * e
-      startRef.current = nx
-      setStart(nx)
-      if (k < 1) inertia.current = requestAnimationFrame(step)
-    }
-    inertia.current = requestAnimationFrame(step)
-  }
+  const settle = () => moveWindow(Math.round(startRef.current))
 
   return (
     <div className={className}>
       <div ref={ref} className="relative touch-pan-y select-none overflow-hidden" style={{ height }}
         onPointerDown={(e) => {
-          cancelAnimationFrame(inertia.current)
           ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-          box.current = (e.currentTarget as HTMLElement).getBoundingClientRect()
-          lastX.current = e.clientX
-          const canPan = maxStart > 0
-          g.current = { id: e.pointerId, x0: e.clientX, y0: e.clientY, t0: performance.now(), mode: 'wait', s: startRef.current, lx: e.clientX, lt: performance.now(), v: 0, timer: 0 }
-          // Col mouse o senza storia da scorrere si esplora subito; col dito aspetto un attimo per capire il gesto
-          if (!canPan || e.pointerType === 'mouse') startScrub(e.clientX)
-          else g.current.timer = window.setTimeout(() => { if (g.current?.mode === 'wait') startScrub(lastX.current) }, 150)
+          g.current = { prev: hoverRef.current, moved: false }
+          select(at(e))
         }}
         onPointerMove={(e) => {
-          const s = g.current
-          if (!s || s.id !== e.pointerId) { if (e.pointerType === 'mouse' && !e.buttons) { box.current = (e.currentTarget as HTMLElement).getBoundingClientRect(); scrubAt(e.clientX) } return }
-          lastX.current = e.clientX
-          const dx = e.clientX - s.x0
-          if (s.mode === 'wait' && Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(e.clientY - s.y0)) {
-            clearTimeout(s.timer); s.mode = 'pan'; s.x0 = e.clientX; s.s = startRef.current
-          }
-          if (s.mode === 'scrub') scrubAt(e.clientX)
-          else if (s.mode === 'pan') {
-            const r = box.current!
-            const nx = clampS(s.s - ((e.clientX - s.x0) / r.width) * (span - 1))
-            const now = performance.now()
-            s.v = (nx - startRef.current) / Math.max(1, now - s.lt)
-            s.lt = now
-            if ((nx === 0 || nx === maxStart) && startRef.current !== nx) haptic('tick')
-            startRef.current = nx
-            setStart(nx)
-          }
+          if (g.current) { const k = at(e); if (k !== hoverRef.current) { g.current.moved = true; select(k) } }
+          else if (e.pointerType === 'mouse') select(at(e))
         }}
-        onPointerUp={end} onPointerCancel={end} onPointerLeave={(e) => { if (e.pointerType === 'mouse' && !g.current) { hoverRef.current = null; setHover(null); onScrub(null) } }}
+        onPointerUp={() => { const s = g.current; g.current = null; if (s && !s.moved && s.prev === hoverRef.current) select(null) }}
+        onPointerCancel={() => { g.current = null }}
+        onPointerLeave={(e) => { if (e.pointerType === 'mouse' && !g.current) select(null) }}
         data-no-swipe role="img" aria-label="Andamento nel tempo">
         {line && (
-          <svg width={w} height={height} className="chart-in block" style={maxStart > 0 ? {
-            // Bordi sfumati quando c'è altra storia da quella parte
-            WebkitMaskImage: `linear-gradient(to right, ${s0 > 0.05 ? 'transparent, black 28px' : 'black, black'}, ${s0 < maxStart - 0.05 ? 'black calc(100% - 28px), transparent' : 'black, black'})`,
-            maskImage: `linear-gradient(to right, ${s0 > 0.05 ? 'transparent, black 28px' : 'black, black'}, ${s0 < maxStart - 0.05 ? 'black calc(100% - 28px), transparent' : 'black, black'})`,
-          } : undefined}>
+          <svg width={w} height={height} className="chart-in block">
             <defs>
               <linearGradient id="scrub" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="currentColor" stopOpacity={0.24} />
@@ -315,7 +243,13 @@ export function ScrubChart({ data, onScrub, onView, view, height = 150, classNam
           </svg>
         )}
       </div>
-      {maxStart > 0 && w > 0 && <Navigator data={data} start={s0} span={span} w={w} onMove={(v) => { cancelAnimationFrame(inertia.current); const nx = clampS(v); startRef.current = nx; setStart(nx) }} onEnd={settle} />}
+      {label && n > 1 && (
+        <div className="mt-1.5 flex justify-between px-4 text-[0.7rem] font-medium opacity-60 first-letter:uppercase">
+          <span className="first-letter:uppercase">{label(a0)}</span>
+          <span className="first-letter:uppercase">{b0 >= n - 1 ? 'Oggi' : label(b0)}</span>
+        </div>
+      )}
+      {maxStart > 0 && w > 0 && <Navigator data={data} start={s0} span={span} w={w} onMove={moveWindow} onEnd={settle} />}
     </div>
   )
 }

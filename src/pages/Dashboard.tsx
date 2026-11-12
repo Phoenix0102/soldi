@@ -16,7 +16,7 @@ import { BalanceSheet } from '../components/BalanceSheet'
 import { NetworthSummary } from '../components/NetworthCard'
 import { Bar, CountMoney, Empty, Money, SkeletonPage } from '../components/ui'
 import { useQuickAdd } from '../components/QuickAdd'
-import { SwipeDismiss, dismissedSet, dismissKey } from '../components/SwipeDismiss'
+import { SwipeDismiss, DismissX, dismissedSet, dismissKey } from '../components/SwipeDismiss'
 import { updateWidget } from '../lib/widget'
 import { format } from 'date-fns'
 import { it } from 'date-fns/locale'
@@ -32,6 +32,7 @@ export default function Dashboard() {
   const qa = useQuickAdd()
   const [balOpen, setBalOpen] = useState(false)
   const [dismissed, setDismissed] = useState(dismissedSet)
+  const [allTodos, setAllTodos] = useState(false)
   const hide = (k: string) => { dismissKey(k); setDismissed(dismissedSet()) }
   const { data: settings, isFetched: settingsReady } = useAppSettings()
   const go = useGo()
@@ -86,7 +87,7 @@ export default function Dashboard() {
   const accMap = new Map(accounts.map((a) => [a.id, a]))
   const top = [...byCat.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4)
   const topMax = top[0]?.[1] ?? 0
-  const upcoming = recurring.filter((r) => r.active && differenceInCalendarDays(parseISO(r.next_date), now) <= 14).slice(0, 4)
+  const upcoming = recurring.filter((r) => r.active && differenceInCalendarDays(parseISO(r.next_date), now) <= 14).sort((a, b) => a.next_date.localeCompare(b.next_date)).slice(0, 3)
   const rate = savingsRate(month.income, month.expense)
   const toSort = txs.filter((t) => !t.category_id && t.kind !== 'transfer').length
   const alerts = liveAlerts(txs, categories, budgets, recurring)
@@ -94,15 +95,21 @@ export default function Dashboard() {
   const hikes = detectSubscriptions(txs, categories).filter((x) => x.active && x.hike)
   const forecast = monthEndForecast(nw.liquid, txs, recurring)
   // Ogni avviso ha una chiave legata al suo contenuto: se lo togli torna solo quando cambia qualcosa
-  const kSort = `sort:${toSort}`
-  const kMissing = `missing:${missing.map((a) => a.id).join(',')}`
-  const kHikes = `hike:${hikes.map((h) => `${h.name}${h.amount}`).join(',')}`
-  const showSort = toSort > 0 && !dismissed.has(kSort)
-  const showMissing = missing.length > 0 && !dismissed.has(kMissing)
-  const showHikes = hikes.length > 0 && !dismissed.has(kHikes)
-  const shownAlerts = alerts.filter((a) => !dismissed.has(`alert:${a.text}`))
-  const todo = (showMissing ? 1 : 0) + (showSort ? 1 : 0) + shownAlerts.length + (showHikes ? 1 : 0)
-
+  type Todo = { key: string; icon: React.ReactNode; tone: string; title: string; text?: string; open?: () => void }
+  const todos: Todo[] = []
+  if (toSort > 0) todos.push({ key: `sort:${toSort}`, icon: <Sparkles size={19} />, tone: 'bg-brand text-brand-ink',
+    title: toSort === 1 ? 'Un movimento da smistare' : `${toSort} movimenti da smistare`, text: 'Assegna una categoria, un tocco per esercente', open: () => go('/smista') })
+  if (missing.length) todos.push({ key: `missing:${missing.map((a) => a.id).join(',')}`, icon: <Scale size={19} />, tone: 'bg-gold/15 text-gold',
+    title: missing.length === 1 ? `Saldo di ${missing[0].name}` : `${missing.length} conti senza saldo`, text: 'Scrivi quanto c\'è oggi', open: () => setBalOpen(true) })
+  if (hikes.length) todos.push({ key: `hike:${hikes.map((h) => `${h.name}${h.amount}`).join(',')}`, icon: <TrendingUp size={19} />, tone: 'bg-gold/15 text-gold',
+    title: hikes.length === 1 ? `${hikes[0].name} è aumentato` : `${hikes.length} abbonamenti aumentati`,
+    text: hikes.length === 1 ? `Ora ${money(hikes[0].amount)} invece di ${money(hikes[0].previous ?? 0)}` : 'Controlla se ti servono ancora', open: () => go('/abbonamenti') })
+  // Gli avvisi sui prezzi cambiati sono già nella riga degli aumenti
+  for (const a of alerts) {
+    if (hikes.some((h) => a.text.startsWith(h.name)) && /invece di/.test(a.text)) continue
+    todos.push({ key: `alert:${format(now, 'yyyy-MM')}:${a.text.split(/[:,]/)[0]}:${a.text.includes('budget') ? 'b' : 'p'}`, icon: a.tone === 'info' ? <Info size={19} /> : <AlertTriangle size={19} />, tone: a.tone === 'info' ? 'bg-sunken text-muted' : 'bg-gold/15 text-gold', title: a.text })
+  }
+  const visibleTodos = todos.filter((t) => !dismissed.has(t.key))
   return (
     <div>
       <header className="mb-5 flex items-center justify-between">
@@ -119,56 +126,32 @@ export default function Dashboard() {
       <NetworthSummary total={nw.total} delta={nw.total - prevValue} liquid={nw.liquid} investments={investments} debts={nw.debts}
         series={history} onOpen={() => go('/patrimonio')} />
 
-      <AdvisorTeaser />
 
-      {/* Da fare: tutto quello che chiede un'azione, in un posto solo */}
-      {todo > 0 && (
+      {/* Da fare: tutto quello che chiede un'azione, in un posto solo. X o scorri a sinistra per toglierlo */}
+      {visibleTodos.length > 0 && (
         <section className="mt-6">
-          <h2 className="mb-2.5 text-lg font-semibold">Da fare</h2>
+          <div className="mb-2.5 flex items-baseline justify-between">
+            <h2 className="text-lg font-semibold">Da fare</h2>
+            {visibleTodos.length > 3 && <button onClick={() => setAllTodos(!allTodos)} className="text-sm font-medium text-brand">{allTodos ? 'Meno' : `Tutti (${visibleTodos.length})`}</button>}
+          </div>
           <ul className="divide-y divide-line overflow-hidden rounded-3xl bg-surface">
-            {showSort && (
-              <li><SwipeDismiss onDismiss={() => hide(kSort)}>
-                <Link to="/smista" className="press flex items-center gap-3.5 px-4 py-3.5">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-brand text-brand-ink"><Sparkles size={19} /></span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block font-semibold">{toSort === 1 ? 'Un movimento da smistare' : `${toSort} movimenti da smistare`}</span>
-                    <span className="block text-sm text-muted">Raggruppati per esercente: un tocco per gruppo</span>
-                  </span>
-                  <ChevronRight size={18} className="text-faint" />
-                </Link>
-              </SwipeDismiss></li>
-            )}
-            {showMissing && (
-              <li><SwipeDismiss onDismiss={() => hide(kMissing)}>
-                <button onClick={() => setBalOpen(true)} className="press flex w-full items-center gap-3.5 px-4 py-3.5 text-left">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gold/15 text-gold"><Scale size={19} /></span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block font-semibold">{missing.length === 1 ? `Saldo di ${missing[0].name}` : `${missing.length} conti senza saldo`}</span>
-                    <span className="block text-sm text-muted">Imposta quanto c'è oggi o archivia i conti che non usi</span>
-                  </span>
-                  <ChevronRight size={18} className="text-faint" />
-                </button>
-              </SwipeDismiss></li>
-            )}
-            {showHikes && (
-              <li><SwipeDismiss onDismiss={() => hide(kHikes)}>
-                <Link to="/abbonamenti" className="press flex items-center gap-3.5 px-4 py-3.5">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gold/15 text-gold"><TrendingUp size={19} /></span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block font-semibold">{hikes.length === 1 ? `${hikes[0].name} è aumentato` : `${hikes.length} abbonamenti aumentati`}</span>
-                    <span className="block text-sm text-muted">{hikes.length === 1 ? `Ora ${money(hikes[0].amount)} invece di ${money(hikes[0].previous ?? 0)}` : 'Controlla se ti servono ancora tutti'}</span>
-                  </span>
-                  <ChevronRight size={18} className="text-faint" />
-                </Link>
-              </SwipeDismiss></li>
-            )}
-            {shownAlerts.map((a) => (
-              <li key={a.text}><SwipeDismiss onDismiss={() => hide(`alert:${a.text}`)}><div className="flex items-start gap-3.5 px-4 py-3.5">
-                <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${a.tone === 'info' ? 'bg-sunken text-muted' : 'bg-gold/15 text-gold'}`}>
-                  {a.tone === 'info' ? <Info size={19} /> : <AlertTriangle size={19} />}
-                </span>
-                <p className="pt-2 text-sm">{a.text}</p>
-              </div></SwipeDismiss></li>
+            {(allTodos ? visibleTodos : visibleTodos.slice(0, 3)).map((t) => (
+              <li key={t.key}>
+                <SwipeDismiss label={`Togli: ${t.title}`} onDismiss={() => hide(t.key)}>
+                  {(dismiss) => (
+                    <div className="flex items-center gap-3 py-3 pr-3 pl-4">
+                      <button onClick={t.open} disabled={!t.open} className="press flex min-w-0 flex-1 items-center gap-3.5 text-left">
+                        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${t.tone}`}>{t.icon}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className={`block leading-snug ${t.text ? 'font-semibold' : 'text-[0.92rem]'}`}>{t.title}</span>
+                          {t.text && <span className="block text-sm text-muted">{t.text}</span>}
+                        </span>
+                      </button>
+                      <DismissX label={`Togli: ${t.title}`} onClick={dismiss} />
+                    </div>
+                  )}
+                </SwipeDismiss>
+              </li>
             ))}
           </ul>
         </section>
@@ -188,14 +171,10 @@ export default function Dashboard() {
         </div>
 
         {forecast.daysLeft > 0 && (
-          <div className="mt-2.5 flex items-center gap-3 rounded-3xl bg-surface px-4 py-3.5">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-brand-soft text-brand"><Telescope size={19} /></span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm text-muted">Liquidità prevista a fine mese</span>
-              <span className={`num block text-lg font-semibold ${forecast.value < 0 ? 'text-neg' : ''}`}>{money(forecast.value, true)}</span>
-            </span>
-            <span className="max-w-[9.5rem] text-right text-xs leading-snug text-faint">{forecast.fixed ? `${money(Math.abs(forecast.fixed), true)} di ricorrenti e ` : ''}~{money(forecast.variable, true)} di spese in {forecast.daysLeft} giorni</span>
-          </div>
+          <p className="mt-2.5 flex items-center gap-2 px-1 text-sm text-muted">
+            <Telescope size={16} className="shrink-0 text-brand" />
+            <span>A fine mese avrai circa <strong className={`num font-semibold ${forecast.value < 0 ? 'text-neg' : 'text-ink'}`}>{money(forecast.value, true)}</strong> sui conti</span>
+          </p>
         )}
 
         <div className="mt-2.5 rounded-3xl bg-surface p-5">
@@ -231,7 +210,10 @@ export default function Dashboard() {
 
       {upcoming.length > 0 && (
         <section className="mt-8">
-          <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold"><CalendarClock size={19} /> In arrivo</h2>
+          <div className="mb-3 flex items-baseline justify-between">
+            <h2 className="flex items-center gap-2 text-lg font-semibold"><CalendarClock size={19} /> In arrivo</h2>
+            <Link to="/abbonamenti" className="text-sm font-medium text-brand">Spese fisse</Link>
+          </div>
           <ul className="divide-y divide-line rounded-3xl bg-surface px-4">
             {upcoming.map((r) => (
               <li key={r.id} className="flex items-center justify-between py-3 text-sm">
@@ -265,23 +247,5 @@ function Stat({ label, value, hint, tone }: { label: string; value: number; hint
       <p className={`mt-0.5 truncate text-[1.05rem] font-semibold tracking-[-0.01em] ${value < 0 ? 'text-neg' : tone === 'pos' ? 'text-pos' : ''}`}><CountMoney value={value} round /></p>
       {hint && <p className="mt-0.5 truncate text-[0.7rem] text-muted">{hint}</p>}
     </div>
-  )
-}
-
-/** Accesso al consulente: mostra il punteggio dell'ultima analisi, se c'è. */
-function AdvisorTeaser() {
-  let score: number | null = null, headline = ''
-  try { const c = JSON.parse(localStorage.getItem('soldi-advisor') ?? 'null'); score = c?.analysis?.score ?? null; headline = c?.analysis?.headline ?? '' } catch { /* nessuna analisi */ }
-  return (
-    <Link to="/consulente" className="ai-card press mt-3 flex items-center gap-3.5 overflow-hidden rounded-3xl px-4 py-3.5">
-      <span className="ai-dot relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white">
-        {score !== null ? <span className="num text-[0.95rem] font-bold">{score}</span> : <Sparkles size={20} />}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block font-semibold">Il tuo consulente AI</span>
-        <span className="block truncate text-sm text-muted">{headline || 'Analisi dei conti, piano d\'azione e domande libere'}</span>
-      </span>
-      <ChevronRight size={18} className="text-faint" />
-    </Link>
   )
 }
