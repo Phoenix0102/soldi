@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useGo } from '../components/nav'
 import { parseISO, differenceInCalendarDays } from 'date-fns'
-import { Settings, ChevronRight, CalendarClock, GraduationCap, FileBarChart, AlertTriangle, Info, Sparkles, Scale } from 'lucide-react'
+import { Settings, ChevronRight, CalendarClock, GraduationCap, FileBarChart, AlertTriangle, Info, Sparkles, Scale, TrendingUp, Telescope } from 'lucide-react'
 import { liveAlerts } from '../lib/insights'
 import { useAccounts, useBalances, useBudgets, useCategories, useRecurring, useSnapshots, useTransactions, useHoldings } from '../lib/data'
 import { useRefreshQuotes } from '../components/Portfolio'
 import { useAppSettings, useBankConnections } from '../lib/data'
 import { useBankSync } from '../components/BankSetup'
-import { cashflow, inMonth, networth, networthHistory, savingsRate, spendByCategory } from '../lib/finance'
+import { cashflow, inMonth, monthEndForecast, networth, networthHistory, savingsRate, spendByCategory } from '../lib/finance'
+import { detectSubscriptions } from '../lib/subscriptions'
 import { money, percent, monthLabel, shortDate } from '../lib/format'
 import { Badge } from '../components/Icon'
 import { TxRow } from '../components/TxRow'
@@ -87,7 +88,9 @@ export default function Dashboard() {
   const toSort = txs.filter((t) => !t.category_id && t.kind !== 'transfer').length
   const alerts = liveAlerts(txs, categories, budgets, recurring)
   const reportMonth = now.getDate() <= 5 ? 'del mese scorso' : 'di questo mese'
-  const todo = (missing.length > 0 ? 1 : 0) + (toSort > 0 ? 1 : 0) + alerts.length
+  const hikes = detectSubscriptions(txs, categories).filter((x) => x.active && x.hike)
+  const forecast = monthEndForecast(nw.liquid, txs, recurring)
+  const todo = (missing.length > 0 ? 1 : 0) + (toSort > 0 ? 1 : 0) + alerts.length + (hikes.length ? 1 : 0)
 
   return (
     <div>
@@ -104,6 +107,8 @@ export default function Dashboard() {
 
       <NetworthSummary total={nw.total} delta={nw.total - prevValue} liquid={nw.liquid} investments={investments} debts={nw.debts}
         series={history} onOpen={() => go('/patrimonio')} />
+
+      <AdvisorTeaser />
 
       {/* Da fare: tutto quello che chiede un'azione, in un posto solo */}
       {todo > 0 && (
@@ -134,6 +139,18 @@ export default function Dashboard() {
                 </button>
               </li>
             )}
+            {hikes.length > 0 && (
+              <li>
+                <Link to="/abbonamenti" className="press flex items-center gap-3.5 px-4 py-3.5">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gold/15 text-gold"><TrendingUp size={19} /></span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-semibold">{hikes.length === 1 ? `${hikes[0].name} è aumentato` : `${hikes.length} abbonamenti aumentati`}</span>
+                    <span className="block text-sm text-muted">{hikes.length === 1 ? `Ora ${money(hikes[0].amount)} invece di ${money(hikes[0].previous ?? 0)}` : 'Controlla se ti servono ancora tutti'}</span>
+                  </span>
+                  <ChevronRight size={18} className="text-faint" />
+                </Link>
+              </li>
+            )}
             {alerts.map((a, i) => (
               <li key={i} className="flex items-start gap-3.5 px-4 py-3.5">
                 <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${a.tone === 'info' ? 'bg-sunken text-muted' : 'bg-gold/15 text-gold'}`}>
@@ -159,7 +176,18 @@ export default function Dashboard() {
           <Stat label="Risparmiato" value={month.net} hint={month.income > 0 ? `${percent(rate)} delle entrate` : undefined} />
         </div>
 
-        <div className="mt-3 rounded-3xl bg-surface p-5">
+        {forecast.daysLeft > 0 && (
+          <div className="mt-2.5 flex items-center gap-3 rounded-3xl bg-surface px-4 py-3.5">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-brand-soft text-brand"><Telescope size={19} /></span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm text-muted">Liquidità prevista a fine mese</span>
+              <span className={`num block text-lg font-semibold ${forecast.value < 0 ? 'text-neg' : ''}`}>{money(forecast.value, true)}</span>
+            </span>
+            <span className="max-w-[9.5rem] text-right text-xs leading-snug text-faint">{forecast.fixed ? `${money(Math.abs(forecast.fixed), true)} di ricorrenti e ` : ''}~{money(forecast.variable, true)} di spese in {forecast.daysLeft} giorni</span>
+          </div>
+        )}
+
+        <div className="mt-2.5 rounded-3xl bg-surface p-5">
           {top.length === 0 ? (
             <Empty title="Ancora nessuna spesa questo mese" text="Registra la prima con il tasto + oppure importa l'estratto conto." />
           ) : (
@@ -226,5 +254,23 @@ function Stat({ label, value, hint, tone }: { label: string; value: number; hint
       <p className={`mt-0.5 truncate text-[1.05rem] font-semibold tracking-[-0.01em] ${value < 0 ? 'text-neg' : tone === 'pos' ? 'text-pos' : ''}`}><CountMoney value={value} round /></p>
       {hint && <p className="mt-0.5 truncate text-[0.7rem] text-muted">{hint}</p>}
     </div>
+  )
+}
+
+/** Accesso al consulente: mostra il punteggio dell'ultima analisi, se c'è. */
+function AdvisorTeaser() {
+  let score: number | null = null, headline = ''
+  try { const c = JSON.parse(localStorage.getItem('soldi-advisor') ?? 'null'); score = c?.analysis?.score ?? null; headline = c?.analysis?.headline ?? '' } catch { /* nessuna analisi */ }
+  return (
+    <Link to="/consulente" className="ai-card press mt-3 flex items-center gap-3.5 overflow-hidden rounded-3xl px-4 py-3.5">
+      <span className="ai-dot relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white">
+        {score !== null ? <span className="num text-[0.95rem] font-bold">{score}</span> : <Sparkles size={20} />}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-semibold">Il tuo consulente AI</span>
+        <span className="block truncate text-sm text-muted">{headline || 'Analisi dei conti, piano d\'azione e domande libere'}</span>
+      </span>
+      <ChevronRight size={18} className="text-faint" />
+    </Link>
   )
 }

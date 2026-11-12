@@ -220,14 +220,30 @@ export function Empty({ title, text, action }: { title: string; text?: string; a
 }
 
 export function PageHeader({ title, subtitle, right }: { title: string; subtitle?: string; right?: ReactNode }) {
+  const ref = useRef<HTMLHeadingElement>(null)
+  const [compact, setCompact] = useState(false)
+  // Quando il titolo grande esce dallo schermo compare una barra compatta in vetro, come su iOS
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const root = el.closest('.pane, .push-layer') as HTMLElement | null
+    const io = new IntersectionObserver(([e]) => setCompact(!e.isIntersecting && e.boundingClientRect.top < (e.rootBounds?.top ?? 0) + 60), { root, threshold: 0, rootMargin: '-56px 0px 0px 0px' })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
   return (
+    <>
+    <div className="compact-wrap lg:hidden" aria-hidden={!compact}>
+      <div className={`compact-bar ${compact ? 'is-on' : ''}`}><span className="truncate">{title}</span></div>
+    </div>
     <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
-        <h1 className="text-[1.9rem] leading-tight font-semibold tracking-[-0.02em]">{title}</h1>
+        <h1 ref={ref} className="text-[1.9rem] leading-tight font-semibold tracking-[-0.02em]">{title}</h1>
         {subtitle && <p className="mt-1 text-muted">{subtitle}</p>}
       </div>
       {right}
     </header>
+    </>
   )
 }
 

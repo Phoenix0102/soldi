@@ -20,6 +20,9 @@
 		5F557C9321E073F54B35C507 /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9775BE2612AD103504A531B7 /* MainViewController.swift */; };
 		B9B42346061580B542EFBFE6 /* SoldiWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC2B6B746DE9403955941FB1 /* SoldiWidget.swift */; };
 		267F692A0B34F335DBF0A9AE /* SoldiWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1C2B63E05DE62B629ADEF470 /* SoldiWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		88A4129C9371F29AC06324CB /* SoldiIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A640737D78187BF23EFF6CA7 /* SoldiIntents.swift */; };
+		866088CA0B1A207C7FAD7335 /* SoldiIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A640737D78187BF23EFF6CA7 /* SoldiIntents.swift */; };
+		85F6D761DA0E630630634BBD /* AppShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC1E6CEDFD0232416B5666A4 /* AppShortcuts.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -65,6 +68,8 @@
 		5E0FED91B0D0C7F3925ACD16 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AC6538D69B5573AF65365C6E /* SoldiWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SoldiWidget.entitlements; sourceTree = "<group>"; };
 		1C2B63E05DE62B629ADEF470 /* SoldiWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SoldiWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A640737D78187BF23EFF6CA7 /* SoldiIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoldiIntents.swift; sourceTree = "<group>"; };
+		EC1E6CEDFD0232416B5666A4 /* AppShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShortcuts.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -111,6 +116,8 @@
 				9582B6822FE993A50072D4E8 /* SceneDelegate.swift */,
 				9775BE2612AD103504A531B7 /* MainViewController.swift */,
 				D701F67C094523EE3A3D0F20 /* WidgetBridge.swift */,
+				A640737D78187BF23EFF6CA7 /* SoldiIntents.swift */,
+				EC1E6CEDFD0232416B5666A4 /* AppShortcuts.swift */,
 				A521F297EE21F58C82C00F01 /* App.entitlements */,
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
@@ -250,6 +257,8 @@
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
 				5F557C9321E073F54B35C507 /* MainViewController.swift in Sources */,
 				E46F5ED71CFAFFECD2AD048A /* WidgetBridge.swift in Sources */,
+				88A4129C9371F29AC06324CB /* SoldiIntents.swift in Sources */,
+				85F6D761DA0E630630634BBD /* AppShortcuts.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -258,6 +267,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B9B42346061580B542EFBFE6 /* SoldiWidget.swift in Sources */,
+				866088CA0B1A207C7FAD7335 /* SoldiIntents.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

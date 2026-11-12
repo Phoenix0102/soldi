@@ -5,7 +5,8 @@ import { applyRules, ruleKeyFor, suggestFromHistory } from '../lib/finance'
 import { detect, extract, hashRow, readFile, type FullMapping, type Grid } from '../lib/importer'
 import { supabase } from '../lib/supabase'
 import { money, shortDate } from '../lib/format'
-import type { TxKind } from '../lib/types'
+import type { Transaction, TxKind } from '../lib/types'
+import { aiConfigured, autoCategorize } from '../lib/ai'
 import { AccountChips } from '../components/QuickAdd'
 import { Link } from '../components/nav'
 import { Label, PageHeader, useToast } from '../components/ui'
@@ -39,7 +40,8 @@ export default function Import() {
   const [rows, setRows] = useState<Row[]>([])
   const [skipped, setSkipped] = useState(0)
   const [busy, setBusy] = useState(false)
-  const [done, setDone] = useState<{ n: number; snapshot: boolean; learned: number; toSort: number } | null>(null)
+  const [done, setDone] = useState<{ n: number; snapshot: boolean; learned: number; toSort: number; ai?: number } | null>(null)
+  const [aiBusy, setAiBusy] = useState(false)
   const [rememberChoices, setRememberChoices] = useState(true)
 
   const account = accounts.find((a) => a.id === accountId)
@@ -147,8 +149,24 @@ export default function Import() {
         })
         if (newRules.length) { await supabase.from('rules').insert(newRules); learned = newRules.length }
       }
+      // Quello che le regole non riconoscono lo propone l'AI (se attiva)
+      let ai = 0
+      const pending = sel.filter((r) => !r.category_id && r.kind !== 'transfer')
+      if (pending.length && await aiConfigured()) {
+        setAiBusy(true)
+        try {
+          const hashes = pending.map((r) => r.hash)
+          const fresh: Transaction[] = []
+          for (let i = 0; i < hashes.length; i += 200) {
+            const { data } = await supabase.from('transactions').select('*').in('import_hash', hashes.slice(i, i + 200))
+            fresh.push(...((data ?? []) as Transaction[]))
+          }
+          ai = await autoCategorize(fresh, categories)
+        } catch { /* l'import è comunque riuscito */ }
+        finally { setAiBusy(false) }
+      }
       invalidate('transactions', 'import_profiles', 'balance_snapshots', 'rules')
-      setDone({ n: sel.length, snapshot, learned, toSort: sel.filter((r) => !r.category_id && r.kind !== 'transfer').length })
+      setDone({ n: sel.length, snapshot, learned, ai, toSort: Math.max(0, pending.length - ai) })
       setRows([]); setGrid(null)
     } catch (e) {
       toast(`Importazione non riuscita: ${(e as Error).message}`, { tone: 'err' })
@@ -169,6 +187,7 @@ export default function Import() {
           <div>
             <p className="font-semibold">{done.n} movimenti importati su {account?.name}</p>
             <p className="text-sm text-muted">{done.snapshot ? 'Ho anche aggiornato il saldo usando quello riportato nel file.' : 'Controlla che il saldo del conto corrisponda a quello della banca; se no, correggilo dalla pagina del conto.'}</p>
+            {!!done.ai && <p className="mt-1 text-sm text-muted">L'AI ha categorizzato altri {done.ai} movimenti e ha salvato le regole: se qualcosa non ti torna, correggilo e l'app impara.</p>}
             {done.learned > 0 && <p className="mt-1 text-sm text-muted">Ho imparato {done.learned} {done.learned === 1 ? 'nuovo esercente' : 'nuovi esercenti'} dalle tue scelte.</p>}
             {done.toSort > 0 && <Link to="/smista" className="btn btn-primary mt-3">Smista i {done.toSort} senza categoria</Link>}
           </div>
@@ -248,7 +267,7 @@ export default function Import() {
                 Ricorda le categorie che scelgo
               </label>
               <button onClick={() => { setRows([]); setGrid(null); setFileName('') }} className="btn btn-ghost"><ArrowLeft size={16} /> Annulla</button>
-              <button onClick={doImport} disabled={!sel.length || busy} className="btn btn-primary">{busy ? 'Importo…' : `Importa ${sel.length} movimenti`}</button>
+              <button onClick={doImport} disabled={!sel.length || busy} className="btn btn-primary">{aiBusy ? 'Categorizzo con l\'AI…' : busy ? 'Importo…' : `Importa ${sel.length} movimenti`}</button>
             </div>
           </div>
           <div className="overflow-hidden rounded-3xl bg-surface">

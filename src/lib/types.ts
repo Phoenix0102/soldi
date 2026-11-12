@@ -32,6 +32,8 @@ export interface Category {
   group_name: string | null
   sort: number
   archived: boolean
+  /** Spesa detraibile nel 730 */
+  deductible?: boolean
 }
 
 export interface Transaction {
@@ -48,6 +50,9 @@ export interface Transaction {
   source: 'manual' | 'csv' | 'bank' | 'receipt' | 'shortcut'
   import_hash: string | null
   created_at: string
+  goal_id?: string | null
+  original_amount?: number | null
+  original_currency?: string | null
 }
 
 export interface Snapshot {
@@ -58,7 +63,9 @@ export interface Snapshot {
   created_at: string
 }
 
-export interface Budget { id: string; category_id: string; amount: number }
+/** fixed: tetto mensile · flex: si adatta, conta il totale delle flessibili · annual: importo annuo (assicurazioni, regali) */
+export type BudgetKind = 'fixed' | 'flex' | 'annual'
+export interface Budget { id: string; category_id: string; amount: number; kind?: BudgetKind }
 
 export interface Goal {
   id: string

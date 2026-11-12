@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Download, LogOut, Plus, Trash2, Lock, KeyRound, ScanFace, Link2, Tags, Database, ChevronRight, GraduationCap, FileBarChart, Upload, Sparkles, Check } from 'lucide-react'
+import { Download, LogOut, Plus, Trash2, Lock, KeyRound, ScanFace, Link2, Tags, Database, ChevronRight, GraduationCap, FileBarChart, Upload, Sparkles, Check, BarChart3, Repeat, CalendarHeart } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAccounts, useCategories, useRules, useTable, useTransactions } from '../lib/data'
 import { getTheme, setTheme, type Theme } from '../lib/theme'
@@ -69,6 +69,14 @@ function SettingsHome() {
           ))}
         </ul>
         <ul className="divide-y divide-line overflow-hidden rounded-3xl bg-surface">
+          {([['/consulente', 'Consulente AI', Sparkles], ['/statistiche', 'Statistiche', BarChart3], ['/abbonamenti', 'Abbonamenti', Repeat], ['/anno', 'Il tuo anno', CalendarHeart]] as const).map(([to, label, I]) => (
+            <li key={to}>
+              <Link to={to} className="press flex items-center gap-3.5 px-4 py-3.5">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand"><I size={18} /></span>
+                <span className="flex-1 font-medium">{label}</span><ChevronRight size={18} className="text-faint" />
+              </Link>
+            </li>
+          ))}
           <li>
             <Link to="/impara" className="press flex items-center gap-3.5 px-4 py-3.5">
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand"><GraduationCap size={18} /></span>
@@ -251,7 +259,7 @@ function CategoriesSection() {
         {list.map((c) => (
           <button key={c.id} onClick={() => setEdit(c)} className={`flex items-center gap-3 rounded-2xl bg-surface p-3 text-left hover:bg-sunken ${c.archived ? 'opacity-40' : ''}`}>
             <Badge icon={c.icon} color={c.color} size={34} />
-            <span className="min-w-0"><span className="block truncate text-sm font-medium">{c.name}</span>{c.group_name && <span className="block truncate text-xs text-muted">{c.group_name}</span>}</span>
+            <span className="min-w-0"><span className="block truncate text-sm font-medium">{c.name}</span>{(c.group_name || c.deductible) && <span className="block truncate text-xs text-muted">{[c.group_name, c.deductible && '730'].filter(Boolean).join(' · ')}</span>}</span>
           </button>
         ))}
       </div>
@@ -268,10 +276,12 @@ function CategoryForm({ cat, kind, onClose }: { cat?: Category; kind: 'expense' 
   const [icon, setIcon] = useState(cat?.icon ?? 'circle')
   const [color, setColor] = useState(cat?.color ?? COLORS[4])
   const [group, setGroup] = useState(cat?.group_name ?? '')
+  const [deductible, setDeductible] = useState(!!cat?.deductible)
   const groups = [...new Set(categories.filter((c) => c.kind === 'expense').map((c) => c.group_name).filter(Boolean))] as string[]
   const save = async () => {
     if (!name.trim()) return
-    const row = { name: name.trim(), icon, color, group_name: (cat?.kind ?? kind) === 'expense' ? group.trim() || null : null }
+    const isExp = (cat?.kind ?? kind) === 'expense'
+    const row = { name: name.trim(), icon, color, group_name: isExp ? group.trim() || null : null, deductible: isExp && deductible }
     if (cat) await update.mutateAsync({ id: cat.id, ...row }); else await insert.mutateAsync({ ...row, kind, sort: 100 })
     toast(cat ? 'Categoria aggiornata' : 'Categoria creata'); onClose()
   }
@@ -283,6 +293,12 @@ function CategoryForm({ cat, kind, onClose }: { cat?: Category; kind: 'expense' 
           <label className="block"><Label>Gruppo</Label>
             <input className="field" list="cat-groups" value={group} onChange={(e) => setGroup(e.target.value)} placeholder="Es. Casa" />
             <datalist id="cat-groups">{groups.map((g) => <option key={g} value={g} />)}</datalist>
+          </label>
+        )}
+        {(cat?.kind ?? kind) === 'expense' && (
+          <label className="flex items-center justify-between gap-3 rounded-2xl bg-sunken px-4 py-3">
+            <span><span className="block text-sm font-medium">Detraibile nel 730</span><span className="block text-xs text-muted">Es. visite mediche, farmaci, università, sport dei figli: le trovi in Statistiche › 730</span></span>
+            <input type="checkbox" checked={deductible} onChange={(e) => setDeductible(e.target.checked)} className="h-5 w-5 shrink-0 accent-[var(--brand)]" />
           </label>
         )}
         <div><Label>Icona</Label>

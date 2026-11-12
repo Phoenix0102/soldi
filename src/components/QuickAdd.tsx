@@ -10,6 +10,8 @@ import { haptic } from '../lib/motion'
 import { supabase } from '../lib/supabase'
 import { applyRules, ruleKeyFor, suggestFromHistory } from '../lib/finance'
 import { useLearnRule } from '../lib/useLearnRule'
+import { isNetworkError, queue } from '../lib/outbox'
+import { takePendingQuickAdd } from '../lib/native'
 import { parseAmount, todayISO, money, round2 } from '../lib/format'
 import type { AccountBalance, Transaction } from '../lib/types'
 
@@ -23,6 +25,18 @@ export function QuickAddProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<{ open: boolean; prefill?: Prefill; editing?: Transaction }>({ open: false })
   const { pathname } = useLocation()
   useEffect(() => { setState({ open: false }) }, [pathname])
+  // Nuovo movimento chiesto da Siri, dal widget o dal Centro di Controllo
+  useEffect(() => {
+    const open = (p: { amount?: number; description?: string } | null) => {
+      if (!p) return
+      takePendingQuickAdd()
+      setState({ open: true, prefill: { mode: 'expense', amount: p.amount, description: p.description } })
+    }
+    open(takePendingQuickAdd())
+    const on = (e: Event) => open((e as CustomEvent).detail)
+    window.addEventListener('soldi:new', on)
+    return () => window.removeEventListener('soldi:new', on)
+  }, [])
   return (
     <Ctx.Provider value={{ open: (p) => setState({ open: true, prefill: p }), edit: (t) => setState({ open: true, editing: t }) }}>
       {children}
@@ -44,7 +58,10 @@ function QuickAddSheet({ prefill, editing, onClose }: { prefill?: Prefill; editi
   const pair = editing?.transfer_group ? txs.filter((t) => t.transfer_group === editing.transfer_group) : []
   const initialMode: Mode = editing ? editing.kind : prefill?.mode ?? 'expense'
   const [mode, setMode] = useState<Mode>(initialMode)
-  const [amountStr, setAmountStr] = useState(editing ? String(Math.abs(editing.amount)).replace('.', ',') : prefill?.amount ? String(prefill.amount).replace('.', ',') : '')
+  // Valuta: gli importi in altre valute si convertono in euro al cambio BCE del giorno
+  const [currency, setCurrency] = useState(editing?.original_currency ?? 'EUR')
+  const [rate, setRate] = useState<number | null>(null)
+  const [amountStr, setAmountStr] = useState(editing ? String(Math.abs(editing.original_currency ? editing.original_amount ?? editing.amount : editing.amount)).replace('.', ',') : prefill?.amount ? String(prefill.amount).replace('.', ',') : '')
   const [desc, setDesc] = useState(editing?.description ?? prefill?.description ?? '')
   const [notes, setNotes] = useState(editing?.notes ?? '')
   const [date, setDate] = useState(editing?.date ?? prefill?.date ?? todayISO())
@@ -80,7 +97,13 @@ function QuickAddSheet({ prefill, editing, onClose }: { prefill?: Prefill; editi
     if (hit && cats.some((c) => c.id === hit)) setCategoryId(hit)
   }, [desc, rules, categories, txs, mode, catTouched, cats])
 
-  const amount = parseAmount(amountStr) ?? 0
+  useEffect(() => {
+    if (currency === 'EUR') { setRate(1); return }
+    setRate(null)
+    fetch(`https://api.frankfurter.app/latest?from=${currency}&to=EUR`).then((r) => r.json()).then((j) => setRate(j.rates?.EUR ?? null)).catch(() => setRate(null))
+  }, [currency])
+  const typed = parseAmount(amountStr) ?? 0
+  const amount = currency === 'EUR' ? typed : rate ? round2(typed * rate) : 0
   const canSave = amount > 0 && accountId && (mode !== 'transfer' || (toAccountId && toAccountId !== accountId))
 
   const onScan = async (file: File) => {
@@ -143,6 +166,9 @@ function QuickAddSheet({ prefill, editing, onClose }: { prefill?: Prefill; editi
         source: editing && !editing.transfer_group ? editing.source : source,
         import_hash: editing && !editing.transfer_group ? editing.import_hash : null,
         created_at: editing?.created_at ?? new Date().toISOString(),
+        goal_id: editing?.goal_id ?? null,
+        original_amount: currency === 'EUR' ? null : (mode === 'expense' ? -typed : typed),
+        original_currency: currency === 'EUR' ? null : currency,
       })]
     }
     const oldIds = editing ? (editing.transfer_group ? pair.map((t) => t.id) : [editing.id]) : []
@@ -172,10 +198,17 @@ function QuickAddSheet({ prefill, editing, onClose }: { prefill?: Prefill; editi
         if (error) throw error
       }
     } catch (e) {
+      // Senza rete il movimento resta sul telefono e parte appena torna la connessione
+      if (isNetworkError(e) && !(editing && !editing.transfer_group && mode !== 'transfer')) {
+        if (oldIds.length) queue({ kind: 'delete', ids: oldIds })
+        queue({ kind: 'insert', rows: rows.map(({ created_at: _c, ...r }) => r) })
+        toast('Salvato sul telefono: lo invio appena torni online')
+        return
+      }
       rollback()
       toast(`Non salvato: ${(e as Error).message}`, { tone: 'err' })
     } finally {
-      invalidate('transactions')
+      if (navigator.onLine) invalidate('transactions')
     }
   }
 
@@ -223,13 +256,19 @@ function QuickAddSheet({ prefill, editing, onClose }: { prefill?: Prefill; editi
       <label className="mt-5 block">
         <span className="sr-only">Importo</span>
         <div className={`flex items-baseline gap-2 border-b-2 pb-2 ${mode === 'income' ? 'border-pos' : 'border-ink'}`}>
-          <span className="text-3xl font-medium text-muted">€</span>
+          <select value={currency} onChange={(e) => setCurrency(e.target.value)} aria-label="Valuta"
+            className="appearance-none bg-transparent text-3xl font-medium text-muted outline-none">
+            {[['EUR', '€'], ['USD', '$'], ['GBP', '£'], ['CHF', 'CHF'], ['JPY', '¥'], ['PLN', 'zł'], ['CZK', 'Kč'], ['HUF', 'Ft'], ['SEK', 'kr'], ['DKK', 'kr'], ['NOK', 'kr'], ['TRY', '₺'], ['AUD', 'A$'], ['CAD', 'C$']].map(([c, sym]) => <option key={c} value={c}>{c === 'EUR' ? sym : `${sym} ${c}`}</option>)}
+          </select>
           <input ref={amountRef} inputMode="decimal" value={amountStr} placeholder="0,00"
             onChange={(e) => setAmountStr(e.target.value.replace(/[^0-9,.]/g, ''))}
             onKeyDown={(e) => e.key === 'Enter' && save()}
             className={`num w-full bg-transparent text-5xl font-semibold tracking-[-0.03em] outline-none focus-visible:outline-none placeholder:text-faint ${mode === 'income' ? 'text-pos' : ''}`} />
         </div>
       </label>
+      {currency !== 'EUR' && (
+        <p className="num mt-2 text-sm text-muted">{rate ? <>≈ <strong className="text-ink">{money(amount)}</strong> al cambio di oggi (1 {currency} = {rate.toLocaleString('it-IT', { maximumFractionDigits: 4 })} €)</> : 'Recupero il cambio…'}</p>
+      )}
 
       <input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder={mode === 'transfer' ? 'Descrizione (facoltativa)' : 'Dove o cosa? Es. Esselunga'}
         className="field mt-4" onKeyDown={(e) => e.key === 'Enter' && save()} />

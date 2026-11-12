@@ -20,6 +20,10 @@ const loaders = {
   smista: () => import('./pages/Triage'),
   resoconto: () => import('./pages/Report'),
   benvenuto: () => import('./pages/Welcome'),
+  abbonamenti: () => import('./pages/Subscriptions'),
+  statistiche: () => import('./pages/Stats'),
+  consulente: () => import('./pages/Advisor'),
+  anno: () => import('./pages/YearReview'),
 }
 
 const routes: RouteObject[] = [{
@@ -39,6 +43,10 @@ const routes: RouteObject[] = [{
     { path: 'smista', lazy: page(loaders.smista) },
     { path: 'resoconto', lazy: page(loaders.resoconto) },
     { path: 'benvenuto', lazy: page(loaders.benvenuto) },
+    { path: 'abbonamenti', lazy: page(loaders.abbonamenti) },
+    { path: 'statistiche', lazy: page(loaders.statistiche) },
+    { path: 'consulente', lazy: page(loaders.consulente) },
+    { path: 'anno', lazy: page(loaders.anno) },
     { path: '*', element: <Navigate to="/" replace /> },
   ],
 }]

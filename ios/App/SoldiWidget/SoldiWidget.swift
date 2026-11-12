@@ -130,7 +130,17 @@ struct MediumView: View {
             }
             Rectangle().fill(Color.noteInk.opacity(0.15)).frame(width: 1)
             VStack(alignment: .leading, spacing: 8) {
-                Text(d.month).font(.system(size: 12, weight: .medium)).foregroundStyle(Color.noteInk.opacity(0.75))
+                HStack {
+                    Text(d.month).font(.system(size: 12, weight: .medium)).foregroundStyle(Color.noteInk.opacity(0.75))
+                    Spacer()
+                    Link(destination: URL(string: "soldi://nuovo")!) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(Color.note)
+                            .frame(width: 26, height: 26)
+                            .background(Circle().fill(Color.noteInk))
+                    }
+                }
                 Row(label: "Uscite", value: d.monthExpense)
                 Row(label: "Entrate", value: d.monthIncome)
                 if d.budgetTotal > 0 {
@@ -215,7 +225,25 @@ struct SoldiWidget: Widget {
     }
 }
 
+@available(iOS 18.0, *)
+struct SoldiQuickAddControl: ControlWidget {
+    var body: some ControlWidgetConfiguration {
+        StaticControlConfiguration(kind: "SoldiQuickAdd") {
+            ControlWidgetButton(action: OpenQuickAddIntent()) {
+                Label("Nuovo movimento", systemImage: "eurosign.circle.fill")
+            }
+        }
+        .displayName("Nuovo movimento")
+        .description("Apre Soldi per registrare una spesa.")
+    }
+}
+
 @main
 struct SoldiWidgetBundle: WidgetBundle {
-    var body: some Widget { SoldiWidget() }
+    var body: some Widget {
+        SoldiWidget()
+        if #available(iOS 18.0, *) {
+            SoldiQuickAddControl()
+        }
+    }
 }

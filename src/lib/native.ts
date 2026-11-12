@@ -24,16 +24,31 @@ export async function initNative() {
   new MutationObserver(syncBar).observe(root, { attributes: true, attributeFilter: ['class', 'data-statusbar'] })
 
   // soldi://banca?code=…&state=… → ricarica l'app con i parametri, li gestisce useBankReturn
-  App.addListener('appUrlOpen', ({ url }) => {
+  const handle = (url: string) => {
     const u = new URL(url)
     const path = `/${u.host}${u.pathname}`.replace(/\/+/g, '/').replace(/\/$/, '') || '/'
     if (path === '/banca') {
       location.href = `/${u.search}#/impostazioni`
+    } else if (path === '/nuovo') {
+      // Siri, widget, Centro di Controllo: apro il nuovo movimento, già compilato se c'è l'importo
+      const amount = Number(u.searchParams.get('importo')) || undefined
+      openQuickAdd({ amount, description: u.searchParams.get('descrizione') ?? undefined })
     } else {
       // soldi://patrimonio, soldi://movimenti… (widget, comandi rapidi)
       import('./navigate').then(({ navigateTo }) => navigateTo(path))
     }
-  })
+  }
+  App.addListener('appUrlOpen', ({ url }) => handle(url))
+  App.getLaunchUrl().then((r) => { if (r?.url) handle(r.url) }).catch(() => {})
 
   setTimeout(() => SplashScreen.hide({ fadeOutDuration: 200 }).catch(() => {}), 50)
 }
+
+/* Apertura del nuovo movimento da fuori (Siri, widget): se l'app non è ancora pronta, resta in attesa. */
+type NewTx = { amount?: number; description?: string }
+let pendingNew: NewTx | null = null
+export function openQuickAdd(p: NewTx) {
+  pendingNew = p
+  window.dispatchEvent(new CustomEvent('soldi:new', { detail: p }))
+}
+export function takePendingQuickAdd() { const p = pendingNew; pendingNew = null; return p }

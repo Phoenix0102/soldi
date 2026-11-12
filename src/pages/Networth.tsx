@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Plus, ChevronRight, Scale, AlertCircle } from 'lucide-react'
+import { Plus, ChevronRight, Scale, AlertCircle, BarChart3, Sparkles } from 'lucide-react'
 import { Link } from '../components/nav'
 import { useAccounts, useBalances, useSnapshots, useTransactions } from '../lib/data'
 import { monthlyChanges, networth, networthSeries, type Period } from '../lib/finance'
@@ -91,6 +91,15 @@ export default function Networth() {
           ))}
         </div>
       </NetworthPanel>
+
+      <div className="mt-3 grid grid-cols-2 gap-2.5">
+        <Link to="/statistiche" className="press flex items-center gap-2.5 rounded-2xl bg-surface px-3.5 py-3 text-sm font-semibold">
+          <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-soft text-brand"><BarChart3 size={17} /></span> Statistiche
+        </Link>
+        <Link to="/consulente" className="press flex items-center gap-2.5 rounded-2xl bg-surface px-3.5 py-3 text-sm font-semibold">
+          <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-brand text-brand-ink"><Sparkles size={17} /></span> Consulente AI
+        </Link>
+      </div>
 
       {empty.length > 0 && (
         <button onClick={() => setBal(true)} className="press mt-4 flex w-full items-center gap-3 rounded-3xl border border-gold/40 bg-gold/10 p-4 text-left">

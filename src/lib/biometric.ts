@@ -12,7 +12,8 @@ const toB64 = (buf: ArrayBuffer) => btoa(String.fromCharCode(...new Uint8Array(b
 const fromB64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0))
 const random = (n: number) => crypto.getRandomValues(new Uint8Array(n))
 
-export const bioEnabled = () => !!localStorage.getItem(KEY)
+// Nell'app iOS Face ID è attivo di default (si può spegnere); nel browser va attivato
+export const bioEnabled = () => isNative() ? localStorage.getItem(KEY) !== 'off' : !!localStorage.getItem(KEY)
 
 export async function bioAvailable() {
   try {
@@ -41,18 +42,18 @@ export async function enableBio() {
   localStorage.setItem(KEY, toB64(cred.rawId))
 }
 
-export const disableBio = () => localStorage.removeItem(KEY)
+export const disableBio = () => (isNative() ? localStorage.setItem(KEY, 'off') : localStorage.removeItem(KEY))
 
 export async function verifyBio() {
   const id = localStorage.getItem(KEY)
-  if (!id) return false
   if (isNative()) {
+    if (id === 'off') return false
     try {
       await (await nativeBio()).verifyIdentity({ reason: 'Sblocca Soldi', useFallback: false })
       return true
     } catch { return false }
   }
-  if (id === NATIVE) return false
+  if (!id || id === NATIVE) return false
   try {
     const res = await navigator.credentials.get({
       publicKey: { challenge: random(32), allowCredentials: [{ type: 'public-key', id: fromB64(id) }], userVerification: 'required', timeout: 60000, rpId: location.hostname },

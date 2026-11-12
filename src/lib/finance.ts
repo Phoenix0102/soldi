@@ -114,6 +114,29 @@ export function monthlyChanges(accounts: Account[], txs: Transaction[], snaps: S
   return h.slice(1).map((p, i) => ({ month: p.month, change: round2(p.value - h[i].value) }))
 }
 
+/**
+ * Previsione di fine mese per la liquidità: saldo di oggi, meno le spese ricorrenti ancora attese,
+ * più le entrate ricorrenti, meno la spesa variabile media per i giorni che mancano.
+ */
+export function monthEndForecast(liquidNow: number, txs: Transaction[], recurring: Recurring[]) {
+  const today = new Date()
+  const end = endOfMonth(today)
+  const daysLeft = Math.max(0, Math.round((+end - +today) / 86400000))
+  const endIso = format(end, 'yyyy-MM-dd'), todayIso = format(today, 'yyyy-MM-dd')
+  let fixed = 0
+  for (const r of recurring) {
+    if (!r.active || r.next_date <= todayIso || r.next_date > endIso) continue
+    fixed += r.kind === 'income' ? r.amount : -r.amount
+  }
+  // Spesa variabile giornaliera: media degli ultimi 3 mesi, esclusi gli addebiti ricorrenti già noti
+  const known = recurring.map((r) => (r.match_text || r.name).toLowerCase())
+  const since = format(subMonths(today, 3), 'yyyy-MM-dd')
+  const variable = txs.filter((t) => t.kind === 'expense' && t.date >= since && t.date < todayIso && !known.some((k) => k && t.description.toLowerCase().includes(k)))
+  const daily = variable.reduce((s, t) => s - t.amount, 0) / 90
+  const value = round2(liquidNow + fixed - daily * daysLeft)
+  return { value, daysLeft, fixed: round2(fixed), variable: round2(daily * daysLeft) }
+}
+
 /* ---------- Ricorrenti ---------- */
 
 export function advance(dateIso: string, f: Frequency) {

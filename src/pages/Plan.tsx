@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useSearchParams } from 'react-router-dom'
-import { Plus, Wand2, Check, Pencil, Sparkles } from 'lucide-react'
+import { Plus, Wand2, Check, Pencil, Sparkles, Repeat, ChevronRight } from 'lucide-react'
+import { Link } from '../components/nav'
+import { detectSubscriptions } from '../lib/subscriptions'
 import { differenceInCalendarDays, parseISO } from 'date-fns'
 import { useAccounts, useBalances, useBudgets, useCategories, useGoals, useRecurring, useTable, useTransactions, useInvalidate } from '../lib/data'
 import { advance, avgMonthlyExpense, detectRecurring, inMonth, monthlyEquivalent, monthsLeft, spendByCategory, cashflow } from '../lib/finance'
 import { money, parseAmount, round2, shortDate, longDate, todayISO, percent } from '../lib/format'
-import { FREQUENCIES, type Budget, type Frequency, type Goal, type Recurring } from '../lib/types'
+import { FREQUENCIES, type Budget, type BudgetKind, type Frequency, type Goal, type Recurring } from '../lib/types'
 import { supabase } from '../lib/supabase'
 import { Badge, COLORS, ICON_NAMES, Icon } from '../components/Icon'
 import { Bar, Empty, Label, Money, PageHeader, Segmented, Sheet, SkeletonRows, useToast } from '../components/ui'
@@ -23,6 +25,7 @@ export default function Plan() {
   return (
     <div>
       <PageHeader title="Piano" subtitle="Decidi prima dove vanno i soldi, poi controlla." />
+      <SubscriptionsCard />
       <Segmented value={tab} onChange={setTab} className="mb-6"
         options={[{ value: 'budget', label: 'Budget' }, { value: 'goals', label: 'Obiettivi' }, { value: 'recurring', label: 'Ricorrenti' }]} />
       <div key={tab} className="fade-in">
@@ -31,6 +34,25 @@ export default function Plan() {
         {tab === 'recurring' && <RecurringTab />}
       </div>
     </div>
+  )
+}
+
+function SubscriptionsCard() {
+  const { data: txs = [] } = useTransactions()
+  const { data: categories = [] } = useCategories()
+  const subs = useMemo(() => detectSubscriptions(txs, categories).filter((s) => s.active && s.type === 'subscription'), [txs, categories])
+  if (!subs.length) return null
+  const monthly = subs.reduce((s, x) => s + x.monthly, 0)
+  const hikes = subs.filter((s) => s.hike).length
+  return (
+    <Link to="/abbonamenti" className="press mb-5 flex items-center gap-3.5 rounded-3xl bg-surface px-4 py-3.5">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#a855f7]/15 text-[#a855f7]"><Repeat size={19} /></span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-semibold">Abbonamenti</span>
+        <span className="block truncate text-sm text-muted">{subs.length} attivi · {money(monthly)} al mese{hikes ? ` · ${hikes} aumentati` : ''}</span>
+      </span>
+      <ChevronRight size={18} className="text-faint" />
+    </Link>
   )
 }
 
@@ -43,8 +65,14 @@ function BudgetTab() {
   const toast = useToast()
   const [editing, setEditing] = useState<string | null>(null)
   const [val, setVal] = useState('')
+  const [kind, setKind] = useState<BudgetKind>('fixed')
 
   const spent = useMemo(() => spendByCategory(inMonth(txs, new Date())), [txs])
+  // Budget annuali: conta la spesa da inizio anno
+  const spentYear = useMemo(() => {
+    const y = String(new Date().getFullYear())
+    return spendByCategory(txs.filter((t) => t.date.startsWith(y)))
+  }, [txs])
   const avg = useMemo(() => {
     const m = new Map<string, number>()
     for (let i = 1; i <= 3; i++) {
@@ -56,8 +84,12 @@ function BudgetTab() {
 
   if (isLoading || !categories) return <SkeletonRows />
   const exp = categories.filter((c) => c.kind === 'expense' && !c.archived)
-  const totalBudget = budgets.reduce((s, b) => s + b.amount, 0)
+  const monthlyOf = (b: Budget) => (b.kind === 'annual' ? b.amount / 12 : b.amount)
+  const totalBudget = budgets.reduce((s, b) => s + monthlyOf(b), 0)
   const totalSpentBudgeted = budgets.reduce((s, b) => s + (spent.get(b.category_id) ?? 0), 0)
+  const flex = budgets.filter((b) => b.kind === 'flex')
+  const flexBudget = flex.reduce((s, b) => s + b.amount, 0)
+  const flexSpent = flex.reduce((s, b) => s + (spent.get(b.category_id) ?? 0), 0)
   const today = new Date()
   const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()
   const monthProgress = today.getDate() / daysInMonth
@@ -66,7 +98,7 @@ function BudgetTab() {
     const n = parseAmount(val)
     const existing = budgets.find((b) => b.category_id === catId)
     if (n === null || n <= 0) { if (existing) await remove.mutateAsync(existing.id) }
-    else await upsert.mutateAsync({ rows: { category_id: catId, amount: round2(n) }, onConflict: 'user_id,category_id' })
+    else await upsert.mutateAsync({ rows: { category_id: catId, amount: round2(n), kind }, onConflict: 'user_id,category_id' })
     setEditing(null)
   }
 
@@ -97,6 +129,16 @@ function BudgetTab() {
           <span className="absolute -top-1 h-4.5 w-0.5 rounded bg-ink/50" style={{ left: `${monthProgress * 100}%` }} title="Oggi" />
         </div>
         <p className="mt-2 text-xs text-muted">La tacca indica a che punto del mese sei. Se la barra la supera, stai spendendo più in fretta del previsto.</p>
+        {flex.length > 0 && (
+          <div className="mt-5 rounded-2xl bg-sunken p-4">
+            <div className="flex items-baseline justify-between text-sm">
+              <span className="font-medium">Spese flessibili <span className="font-normal text-muted">({flex.length} categorie)</span></span>
+              <span className="num"><strong>{money(flexSpent, true)}</strong> <span className="text-muted">/ {money(flexBudget, true)}</span></span>
+            </div>
+            <div className="mt-2"><Bar value={flexSpent} max={flexBudget} thin tone={flexSpent > flexBudget ? 'neg' : flexSpent > flexBudget * monthProgress + 0.1 * flexBudget ? 'warn' : 'brand'} /></div>
+            <p className="mt-1.5 text-xs text-muted">Conta il totale: se sfori in una categoria flessibile ma risparmi in un'altra, va bene.</p>
+          </div>
+        )}
       </section>
 
       <div className="mt-8 space-y-8">
@@ -106,7 +148,7 @@ function BudgetTab() {
             <ul className="divide-y divide-line rounded-3xl bg-surface">
               {exp.filter((c) => (c.group_name ?? 'Altro') === g).map((c) => {
                 const b = budgets.find((x) => x.category_id === c.id)
-                const s = spent.get(c.id) ?? 0
+                const s = b?.kind === 'annual' ? spentYear.get(c.id) ?? 0 : spent.get(c.id) ?? 0
                 const a = avg.get(c.id)
                 return (
                   <li key={c.id} className="flex items-center gap-3 px-4 py-3.5">
@@ -115,16 +157,23 @@ function BudgetTab() {
                       <div className="flex items-baseline justify-between gap-2">
                         <span className="truncate font-medium">{c.name}</span>
                         {editing === c.id ? (
-                          <span className="flex items-center gap-1">
+                          <span className="flex flex-wrap items-center justify-end gap-1">
+                            <select value={kind} onChange={(e) => setKind(e.target.value as BudgetKind)} className="field !w-auto !py-1 text-xs" aria-label="Tipo di budget">
+                              <option value="fixed">Fisso / mese</option>
+                              <option value="flex">Flessibile / mese</option>
+                              <option value="annual">Annuale</option>
+                            </select>
                             <input autoFocus inputMode="decimal" value={val} onChange={(e) => setVal(e.target.value)}
                               onKeyDown={(e) => { if (e.key === 'Enter') saveBudget(c.id); if (e.key === 'Escape') setEditing(null) }}
                               className="field num !w-24 !py-1 text-right" placeholder={a ? String(Math.ceil(a / 10) * 10) : '0'} />
                             <button onClick={() => saveBudget(c.id)} className="rounded-full p-1.5 text-brand hover:bg-sunken" aria-label="Salva"><Check size={18} /></button>
                           </span>
                         ) : (
-                          <button onClick={() => { setEditing(c.id); setVal(b ? String(b.amount).replace('.', ',') : '') }} className="num shrink-0 text-sm hover:underline">
+                          <button onClick={() => { setEditing(c.id); setKind(b?.kind ?? 'fixed'); setVal(b ? String(b.amount).replace('.', ',') : '') }} className="num shrink-0 text-sm hover:underline">
                             <span className="font-semibold">{money(s)}</span>
                             <span className="text-muted"> / {b ? money(b.amount, true) : 'imposta'}</span>
+                            {b?.kind === 'annual' && <span className="ml-1 rounded-full bg-gold/15 px-1.5 py-0.5 text-[0.65rem] font-semibold text-gold">ANNO</span>}
+                            {b?.kind === 'flex' && <span className="ml-1 rounded-full bg-brand-soft px-1.5 py-0.5 text-[0.65rem] font-semibold text-brand">FLEX</span>}
                           </button>
                         )}
                       </div>
@@ -156,7 +205,9 @@ function GoalsTab() {
   const active = goals.filter((g) => !g.archived)
   const emergency = round2(avgMonthlyExpense(txs, 3) * 6)
 
-  const progressOf = (g: Goal) => (g.account_id ? Math.max(0, balances?.get(g.account_id)?.balance ?? 0) : g.saved_amount)
+  // Movimenti collegati all'obiettivo (pressione lunga su un movimento → Collega a un obiettivo)
+  const linked = (g: Goal) => txs.filter((t) => t.goal_id === g.id).reduce((s, t) => s + Math.abs(t.amount), 0)
+  const progressOf = (g: Goal) => (g.account_id ? Math.max(0, balances?.get(g.account_id)?.balance ?? 0) : g.saved_amount) + linked(g)
 
   return (
     <div>
@@ -192,6 +243,7 @@ function GoalsTab() {
                   {!g.account_id && !done && <button onClick={() => setAdding(g)} className="btn btn-ghost flex-1"><Plus size={16} /> Aggiungi</button>}
                   {done && <button onClick={async () => { await update.mutateAsync({ id: g.id, archived: true }); toast('Obiettivo archiviato') }} className="btn btn-ghost flex-1">Archivia</button>}
                   {g.account_id && <p className="text-xs text-muted">Avanza da solo con il saldo del conto collegato.</p>}
+                  {linked(g) > 0 && <p className="text-xs text-muted">Di cui {money(linked(g), true)} da movimenti collegati.</p>}
                 </div>
               </article>
             )

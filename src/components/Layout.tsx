@@ -3,8 +3,11 @@ import {
   forwardRef, lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState,
   type ComponentType, type ReactNode,
 } from 'react'
-import { House, ArrowLeftRight, Plus, Target, PieChart, GraduationCap, Upload, Settings, FileBarChart } from 'lucide-react'
+import { House, ArrowLeftRight, Plus, Target, PieChart, GraduationCap, Upload, Settings, FileBarChart, RefreshCw } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
 import { BackCtx } from './back'
+import { InPagerCtx } from './pane'
+import { TxActionsProvider } from './TxActions'
 import { QuickAddProvider, useQuickAdd } from './QuickAdd'
 import { NavLink } from './nav'
 import { NetworkStatus } from './NetworkStatus'
@@ -63,8 +66,10 @@ export function Layout() {
   useBankReturn(useCallback(() => navigate('/impostazioni/collegamenti'), [navigate]))
   return (
     <QuickAddProvider>
-      <NetworkStatus />
-      {mobile ? <MobileShell /> : <DesktopShell />}
+      <TxActionsProvider>
+        <NetworkStatus />
+        {mobile ? <MobileShell /> : <DesktopShell />}
+      </TxActionsProvider>
     </QuickAddProvider>
   )
 }
@@ -178,6 +183,8 @@ function MobileShell() {
 
   // Gesto dal bordo sinistro per tornare indietro
   useEdgeBack(layerRefs, live, pagerRef, back)
+  const ptrRef = useRef<HTMLDivElement>(null)
+  usePullToRefresh(ptrRef)
 
   // Tap sulla barra di stato (app iOS): torna in cima
   useEffect(() => {
@@ -205,6 +212,7 @@ function MobileShell() {
         <Pager ref={pagerRef} index={tab} covered={depth > 0}
           onSettle={(i) => { if (i !== tab) { haptic('tick'); navigate(TABS[i].to, { replace: true }) } }} />
         <div aria-hidden className="status-scrim pointer-events-none fixed inset-x-0 top-0 z-20" />
+        <div ref={ptrRef} aria-hidden className="ptr"><RefreshCw size={18} strokeWidth={2.4} /></div>
 
         {layers.map((l, i) => {
           const liveIdx = live.indexOf(l)
@@ -280,6 +288,8 @@ const Pager = forwardRef<HTMLDivElement, { index: number; covered: boolean; onSe
     const onScroll = () => {
       const p = el.scrollLeft / el.clientWidth
       root.style.setProperty('--tab-p', p.toFixed(4))
+      // La lente si allunga un po' mentre si sposta, come una goccia
+      root.style.setProperty('--tab-s', (1 + 0.22 * Math.sin(Math.PI * (p - Math.floor(p)))).toFixed(3))
       const near = Math.round(p)
       if (Math.abs(p - near) < 0.25) setMounted((m) => (m.has(near) ? m : new Set([...m, near])))
       clearTimeout(t)
@@ -288,6 +298,7 @@ const Pager = forwardRef<HTMLDivElement, { index: number; covered: boolean; onSe
     const done = () => {
       const p = el.scrollLeft / el.clientWidth
       const i = Math.round(p)
+      if (Math.abs(p - i) < 0.02) document.documentElement.style.setProperty('--tab-s', '1')
       if (Math.abs(p - i) < 0.02 && i !== indexRef.current) settle.current(i)
     }
     const onResize = () => el.scrollTo({ left: indexRef.current * el.clientWidth, behavior: 'instant' })
@@ -305,7 +316,9 @@ const Pager = forwardRef<HTMLDivElement, { index: number; covered: boolean; onSe
           <section key={t.to} className="pane" aria-label={t.label} aria-hidden={i !== index}>
             <div className="mx-auto w-full max-w-2xl px-4 pt-safe pb-[calc(7.5rem+env(safe-area-inset-bottom))]">
               <div className="pt-4">
-                {mounted.has(i) ? <Suspense fallback={<SkeletonPage />}><Page /></Suspense> : <SkeletonPage />}
+                <InPagerCtx.Provider value>
+                  {mounted.has(i) ? <Suspense fallback={<SkeletonPage />}><Page /></Suspense> : <SkeletonPage />}
+                </InPagerCtx.Provider>
               </div>
             </div>
           </section>
@@ -389,13 +402,75 @@ function useEdgeBack(
   }, [layerRefs, pagerRef])
 }
 
+/* ---------- Tirare giù per aggiornare ---------- */
+function usePullToRefresh(ind: React.RefObject<HTMLDivElement | null>) {
+  const qc = useQueryClient()
+  useEffect(() => {
+    let y0 = 0, x0 = 0, dy = 0, box: HTMLElement | null = null, armed = false, busy = false, active = false
+    const set = (p: number) => {
+      const el = ind.current
+      if (!el) return
+      el.style.transition = 'none'
+      el.style.opacity = String(Math.min(1, p * 1.4))
+      el.style.transform = `translate3d(0,${-40 + 50 * Math.min(1, p)}px,0) scale(${0.6 + 0.4 * Math.min(1, p)}) rotate(${p * 270}deg)`
+    }
+    const hide = () => {
+      const el = ind.current
+      if (!el) return
+      el.classList.remove('is-spinning')
+      el.style.transition = 'opacity .25s ease, transform .35s var(--ease-ios)'
+      el.style.opacity = '0'; el.style.transform = 'translate3d(0,-40px,0) scale(.6)'
+    }
+    const onStart = (e: TouchEvent) => {
+      if (busy || e.touches.length !== 1) return
+      box = (e.target as HTMLElement).closest?.('.pane, .push-layer') as HTMLElement | null
+      if (!box || box.scrollTop > 0) { box = null; return }
+      y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; dy = 0; armed = false; active = true
+    }
+    const onMove = (e: TouchEvent) => {
+      if (!active || !box) return
+      const t = e.touches[0]
+      dy = t.clientY - y0
+      if (Math.abs(t.clientX - x0) > Math.abs(dy) || box.scrollTop > 2) { active = false; hide(); return }
+      if (dy <= 0) { set(0); return }
+      const p = dy / 110
+      set(p)
+      if (p >= 1 && !armed) { armed = true; haptic('tick') }
+      if (p < 1) armed = false
+    }
+    const onEnd = async () => {
+      if (!active) return
+      active = false
+      if (!armed) { hide(); return }
+      busy = true
+      const el = ind.current
+      if (el) { el.style.transition = 'transform .3s var(--ease-ios)'; el.style.transform = 'translate3d(0,10px,0) scale(1)'; el.classList.add('is-spinning') }
+      try { await qc.refetchQueries({ type: 'active' }) } finally {
+        haptic('success')
+        setTimeout(() => { hide(); busy = false }, 250)
+      }
+    }
+    window.addEventListener('touchstart', onStart, { passive: true })
+    window.addEventListener('touchmove', onMove, { passive: true })
+    window.addEventListener('touchend', onEnd)
+    window.addEventListener('touchcancel', onEnd)
+    return () => {
+      window.removeEventListener('touchstart', onStart)
+      window.removeEventListener('touchmove', onMove)
+      window.removeEventListener('touchend', onEnd)
+      window.removeEventListener('touchcancel', onEnd)
+    }
+  }, [ind, qc])
+}
+
 /* ---------- Barra in basso ---------- */
 function TabBar({ active, hidden, onTab, onAdd }: { active: number; hidden: boolean; onTab: (i: number) => void; onAdd: () => void }) {
   const cols = [0, 1, null, 2, 3] as const
   return (
     <nav className={`tabbar no-print ${hidden ? 'is-hidden' : ''}`} aria-label="Navigazione">
       <div className="tabbar-inner">
-        <span aria-hidden className="tabbar-pill" />
+        <span aria-hidden className="tabbar-lens l" />
+        <span aria-hidden className="tabbar-lens r" />
         {cols.map((i) => i === null ? (
           <div key="add" className="flex items-center justify-center">
             <button onClick={onAdd} aria-label="Nuovo movimento" className="tabbar-add"><Plus size={24} strokeWidth={2.4} /></button>
